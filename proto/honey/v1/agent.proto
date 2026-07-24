@@ -1,0 +1,294 @@
+syntax = "proto3";
+
+package honey.v1;
+
+option go_package = "github.com/akiko99x/honey/agent/gen/honey/v1;honeyv1";
+
+import "honey/v1/common.proto";
+
+// AgentService is served by the Agent on every node.
+// Master is the gRPC client, connection is secured with mTLS.
+//
+// naming keeps the project's loose-english vibe on purpose: whoru, ping, start...
+service AgentService {
+  // who r u — first call after the mTLS handshake, agent introduces itself.
+  rpc WhoRU(WhoRURequest) returns (NodeIdentity);
+
+  // ping — liveness + rough latency probe.
+  rpc Ping(PingRequest) returns (PingReply);
+
+  // start — bring the core up with the given config.
+  rpc Start(StartRequest) returns (CoreStatus);
+
+  // stop — take the core down.
+  rpc Stop(StopRequest) returns (CoreStatus);
+
+  // apply — push a fresh config and reload (restart) the core.
+  rpc Apply(ApplyRequest) returns (CoreStatus);
+
+  // validate — build and check the candidate without changing process state.
+  rpc Validate(ApplyRequest) returns (CoreStatus);
+
+  // stats — server stream of live traffic, sampled from the Clash API.
+  rpc Stats(StatsRequest) returns (stream StatSample);
+
+  // logs — a finite snapshot of the agent's structured in-memory log ring.
+  // Detailed operational errors stay behind the authenticated master API.
+  rpc Logs(AgentLogsRequest) returns (stream AgentLogEntry);
+
+  // connections — a point-in-time snapshot of active connections, read from the
+  // Clash API. Powers the master's live-connections view (who's online now).
+  rpc Connections(ConnectionsRequest) returns (ConnectionsReply);
+
+  // closeConnections — close specific active connections by id (Clash API
+  // DELETE /connections/:id). Used to enforce per-user device limits.
+  rpc CloseConnections(CloseConnectionsRequest) returns (CloseConnectionsReply);
+
+  // metrics — a live snapshot of host system metrics (cpu/mem/disk/bandwidth),
+  // read from the node itself. Powers the node overview's capacity cards.
+  rpc Metrics(MetricsRequest) returns (MetricsReply);
+
+  // configDrift — compare the config the agent would build from this spec
+  // against what is actually on disk, so the master can detect tampering or a
+  // half-applied push (running config != intended).
+  rpc ConfigDrift(ConfigDriftRequest) returns (ConfigDriftReply);
+
+  // benchmark — coarse master<->node throughput over the control channel: the
+  // master sends `payload` (upload leg) and the agent returns `respond_bytes`
+  // (download leg). Bounded by the gRPC message limit, so it is a signal, not a
+  // line-rate speed test of the data plane.
+  rpc Benchmark(BenchmarkRequest) returns (BenchmarkReply);
+}
+
+message WhoRURequest {}
+
+message PingRequest { int64 sent_at = 1; }  // client clock, unix millis
+message PingReply {
+  int64 sent_at = 1;   // echoed back
+  int64 recv_at = 2;   // agent clock, unix millis
+}
+
+message StartRequest {
+  CoreKind core = 1;
+  NodeSpec spec = 2;            // agent builds config.json from this
+  string   raw_config_json = 3; // optional: bypass the builder, use as-is
+}
+
+message StopRequest { CoreKind core = 1; }
+
+message ApplyRequest {
+  CoreKind core = 1;
+  NodeSpec spec = 2;
+  string   raw_config_json = 3;
+}
+
+// NodeSpec is the desired core state. one sing-box instance can carry many
+// inbounds at once, so vless + hy2 + others live on a single node together.
+message NodeSpec {
+  string   log_level = 1;    // "info" default
+  string   clash_listen = 2; // clash api addr, "127.0.0.1:9090" default
+  string   clash_secret = 3;
+  repeated Inbound inbounds = 4;
+  repeated WireguardInterface wireguard = 5; // separate data-plane (wg/awg)
+  repeated NodeService services = 6;         // managed external daemons (mtproto/naive)
+}
+
+// NodeService is a managed external daemon the agent runs directly (not a core
+// inbound): an MTProto proxy (mtg) or a NaiveProxy (Caddy).
+message NodeService {
+  string kind = 1;        // "mtproto" | "naive"
+  string name = 2;
+  uint32 listen_port = 3;
+  string secret = 4;      // mtproto ee-secret / naive password
+  string config_json = 5; // per-kind extras (fake-TLS host, username, domain)
+}
+
+// WireguardInterface is a wg/awg server the agent runs directly (not a core
+// inbound). One peer per user that has access to the node.
+message WireguardInterface {
+  string name = 1;
+  uint32 listen_port = 2;
+  string private_key = 3;         // server private key, standard base64
+  string address = 4;             // server address in the pool, e.g. 10.7.0.1
+  uint32 mtu = 5;
+  bool   amnezia = 6;             // AmneziaWG (obfuscated) vs plain WireGuard
+  string amnezia_params_json = 7; // {"jc":..,"h1":..} — shared server/client
+  repeated WireguardPeer peers = 8;
+}
+
+message WireguardPeer {
+  string public_key = 1; // client public key
+  string allowed_ip = 2; // client /32 (e.g. 10.7.0.2/32)
+}
+
+message Inbound {
+  string    tag = 1;         // unique, e.g. "vless-in"
+  string    type = 2;        // vless | vmess | trojan | shadowsocks | hysteria2 | tuic | anytls | shadowtls
+  string    listen = 3;      // "::" default
+  uint32    listen_port = 4;
+  repeated InboundUser users = 5;
+  Tls       tls = 6;
+  string    extra_json = 7;  // escape hatch: merged verbatim into the inbound
+  string    core = 8;        // which core runs this inbound: "singbox" (default) | "xray"
+  Transport transport = 9;   // network transport (first-class)
+  uint32    up_mbps = 10;    // bandwidth cap (Mbps), 0 = unlimited; hysteria2
+  uint32    down_mbps = 11;  // bandwidth cap (Mbps), 0 = unlimited; hysteria2
+  // multihop: a full sing-box outbound (JSON) to the exit inbound. When set,
+  // the agent adds it and routes this inbound's traffic through it.
+  string    upstream_outbound_json = 12;
+}
+
+message InboundUser {
+  string name = 1;
+  string uuid = 2;     // vless / vmess
+  string password = 3; // hysteria2 / trojan / shadowsocks / tuic / anytls
+  string flow = 4;     // vless flow, e.g. "xtls-rprx-vision"
+  // remaining quota in bytes as of this push, for local (agent-side) cutoff.
+  // 0 = unlimited. The agent drops the user from the core once its usage since
+  // this push exceeds this, bridging the window between master pushes.
+  uint64 quota_bytes = 5;
+}
+
+// Transport is the network layer under the protocol.
+message Transport {
+  string network = 1;      // tcp(default) | ws | grpc | http | httpupgrade | xhttp | quic | mkcp
+  string path = 2;         // ws / http / httpupgrade / xhttp
+  string host = 3;         // ws / http Host header
+  string service_name = 4; // grpc
+  string mode = 5;         // xhttp: auto | packet-up | stream-up | stream-one
+}
+
+message Tls {
+  bool    enabled = 1;
+  string  server_name = 2;
+  string  cert_path = 3;
+  string  key_path = 4;
+  Reality reality = 5;
+  bool    ech = 6;              // Encrypted Client Hello
+  string  utls_fingerprint = 7; // chrome | firefox | safari | randomized (client hint)
+
+  // shadowtls (when type == "shadowtls"): the real TLS server to masquerade to
+  string  shadowtls_handshake_server = 8;
+  uint32  shadowtls_handshake_port = 9;
+}
+
+message Reality {
+  string          private_key = 1;
+  repeated string short_ids = 2;
+  string          handshake_server = 3;
+  uint32          handshake_port = 4; // 443 default
+}
+
+message StatsRequest {
+  CoreKind core = 1;
+  uint32   interval_ms = 2; // how often the agent samples the Clash API
+}
+
+message StatSample {
+  int64  at = 1;          // agent clock, unix millis
+  uint64 up_bytes = 2;    // node total: cumulative upload since core start
+  uint64 down_bytes = 3;  // node total: cumulative download
+  uint64 up_speed = 4;    // bytes/s over the last interval
+  uint64 down_speed = 5;  // bytes/s over the last interval
+  uint32 connections = 6; // active connections right now
+  repeated UserStat users = 7; // per-user cumulative traffic
+  string epoch = 8;       // stable for one agent process; changes on agent restart
+}
+
+message AgentLogsRequest {
+  uint64 after_seq = 1; // exclusive cursor; zero starts from the retained tail
+  uint32 limit = 2;     // server clamps this to a safe maximum
+}
+
+message AgentLogEntry {
+  uint64 seq = 1;
+  int64  at_unix_ms = 2;
+  string level = 3;
+  string code = 4;
+  string message = 5;
+}
+
+message UserStat {
+  string name = 1;       // inbound user name (= panel username)
+  uint64 up_bytes = 2;   // cumulative upload for this user
+  uint64 down_bytes = 3; // cumulative download
+}
+
+message ConnectionsRequest {
+  CoreKind core = 1; // sing-box today (has the Clash API); xray returns empty
+}
+
+message ConnectionsReply {
+  repeated LiveConn conns = 1;
+}
+
+// LiveConn is one active connection as reported by the Clash API. Cumulative
+// byte counters are for this single connection since it opened.
+message LiveConn {
+  string id = 1;
+  string user = 2;         // inbound user (= panel username), empty if none
+  string source_ip = 3;    // client address
+  string destination = 4;  // requested host, else dest ip:port
+  string network = 5;      // tcp | udp
+  uint64 up_bytes = 6;
+  uint64 down_bytes = 7;
+  int64  started_at = 8;   // unix millis, 0 if unknown
+  string chain = 9;        // outbound chain (last hop), best-effort
+}
+
+message CloseConnectionsRequest {
+  CoreKind core = 1;
+  repeated string ids = 2; // Clash connection ids to close
+}
+
+message CloseConnectionsReply {
+  uint32 closed = 1; // how many were closed successfully
+}
+
+message MetricsRequest {}
+
+// MetricsReply is a live host snapshot. Rates (cpu_percent, net_*) are computed
+// over a short in-handler sampling window. Zeroed fields mean "unavailable on
+// this platform" (metrics are Linux /proc-based).
+message MetricsReply {
+  double cpu_percent = 1;   // 0..100 across all cores
+  uint32 cpu_cores = 2;
+  uint64 mem_total = 3;     // bytes
+  uint64 mem_used = 4;      // bytes (total - available)
+  uint64 disk_total = 5;    // root filesystem bytes
+  uint64 disk_used = 6;     // bytes
+  uint64 net_rx_speed = 7;  // bytes/s in
+  uint64 net_tx_speed = 8;  // bytes/s out
+  double load1 = 9;         // 1-minute load average
+  int64  uptime_secs = 10;  // host uptime
+  bool   supported = 11;    // false when the platform has no /proc metrics
+}
+
+message BenchmarkRequest {
+  bytes  payload = 1;        // upload leg: master -> agent
+  uint32 respond_bytes = 2;  // download leg: how much to send back
+}
+
+message BenchmarkReply {
+  bytes  payload = 1;        // respond_bytes of filler
+  uint64 received_bytes = 2; // what the agent actually received
+  int64  recv_at_ms = 3;     // agent clock when the request landed
+}
+
+message ConfigDriftRequest {
+  NodeSpec spec = 1; // the master's current desired state
+}
+
+message ConfigDriftReply {
+  repeated CoreDrift cores = 1;
+}
+
+// CoreDrift is the per-core verdict. Hashes are canonical (parsed JSON,
+// key-sorted) so formatting differences don't count as drift.
+message CoreDrift {
+  CoreKind core = 1;
+  string desired_hash = 2;    // hash of the config built from the spec
+  string running_hash = 3;    // hash of the on-disk config
+  bool   drifted = 4;         // running != desired
+  bool   running_present = 5; // false when no config is on disk yet
+}

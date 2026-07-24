@@ -1,0 +1,20 @@
+[Unit]
+Description=honey PostgreSQL backup
+After=postgresql.service network-online.target
+Wants=postgresql.service
+
+[Service]
+Type=oneshot
+User=honey
+# DATABASE_URL and optional HONEY_BACKUP_* live here (chmod 600).
+EnvironmentFile=/etc/honey/master.env
+ExecStart=/opt/honey/bin/backup-postgres.sh /var/lib/honey/backups
+# hardening
+NoNewPrivileges=true
+ProtectSystem=strict
+ReadWritePaths=/var/lib/honey/backups
+# Optional GPG keyring. The leading '-' keeps plaintext-only backups working
+# when the directory has not been created.
+ReadWritePaths=-/var/lib/honey/.gnupg
+ProtectHome=true
+PrivateTmp=true

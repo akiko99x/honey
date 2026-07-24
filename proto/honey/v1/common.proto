@@ -1,0 +1,38 @@
+syntax = "proto3";
+
+package honey.v1;
+
+option go_package = "github.com/akiko99x/honey/agent/gen/honey/v1;honeyv1";
+
+// which core an agent is driving on a node.
+enum CoreKind {
+  CORE_KIND_UNSPECIFIED = 0;
+  CORE_KIND_SINGBOX = 1; // priority core
+  CORE_KIND_XRAY = 2;
+}
+
+enum CoreState {
+  CORE_STATE_UNSPECIFIED = 0;
+  CORE_STATE_STOPPED = 1;
+  CORE_STATE_RUNNING = 2;
+  CORE_STATE_ERRORED = 3;
+}
+
+// who the agent is. sent back on the WhoRU handshake.
+message NodeIdentity {
+  string node_id = 1;          // stable id, assigned/known by master
+  string hostname = 2;
+  string agent_version = 3;
+  string singbox_version = 4;
+  string os = 5;               // e.g. "linux/amd64"
+  int64  started_at = 6;       // agent process start, unix seconds
+  string xray_version = 7;     // "" if xray isn't installed
+}
+
+// live state of a core after a control call.
+message CoreStatus {
+  CoreKind  core = 1;
+  CoreState state = 2;
+  int32     pid = 3;
+  string    message = 4;       // human note / last error
+}

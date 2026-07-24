@@ -1,0 +1,55 @@
+name: Bug report
+description: Report a reproducible honey defect
+title: "[bug] "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Do not report vulnerabilities or paste live secrets here. Follow SECURITY.md for private reporting.
+  - type: input
+    id: version
+    attributes:
+      label: honey version
+      description: Release tag or commit SHA.
+      placeholder: v0.0.0
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Environment
+      description: OS, architecture, deployment topology, sing-box/Xray and client versions.
+      placeholder: Ubuntu 24.04, amd64, single-server, sing-box 1.13.14
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: What happened?
+      description: Include the expected result and the actual result.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Reproduction
+      description: Provide the smallest reliable sequence of steps.
+    validations:
+      required: true
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Sanitized diagnostics
+      description: Include honey error codes and request IDs. Remove all deployment-specific values and secrets.
+      render: text
+  - type: checkboxes
+    id: safety
+    attributes:
+      label: Safety check
+      options:
+        - label: I removed credentials, tokens, subscription URLs, private keys, certificates, user data, hostnames and public IP addresses.
+          required: true
+        - label: This is not a security vulnerability.
+          required: true

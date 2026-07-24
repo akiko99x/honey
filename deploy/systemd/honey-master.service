@@ -1,0 +1,30 @@
+[Unit]
+Description=honey master
+After=network-online.target postgresql.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=honey
+Group=honey
+UMask=0077
+EnvironmentFile=/etc/honey/master.env
+Environment=HONEY_UPDATE_AUTO_RESTART=1
+ExecStart=/opt/honey/bin/honey-master run --api-listen ${HONEY_API_LISTEN} --dial-listen ${HONEY_DIAL_LISTEN}
+WorkingDirectory=/var/lib/honey
+Restart=always
+RestartSec=2
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+ReadWritePaths=/opt/honey/bin /var/lib/honey
+
+[Install]
+WantedBy=multi-user.target

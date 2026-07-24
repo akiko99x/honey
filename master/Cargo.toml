@@ -1,0 +1,68 @@
+[package]
+name = "honey-master"
+version = "0.0.0"
+edition = "2021"
+description = "honey master — panel, db, rest api, grpc client to node agents"
+license = "AGPL-3.0-only"
+repository = "https://github.com/akiko99x/honey"
+homepage = "https://github.com/akiko99x/honey"
+
+[[bin]]
+name = "honey-master"
+path = "src/main.rs"
+
+[dependencies]
+tonic = { version = "0.12", features = ["tls"] }
+prost = "0.13"
+tokio = { version = "1", features = ["full"] }
+tokio-stream = "0.1"
+axum = "0.7"
+anyhow = "1"
+clap = { version = "4", features = ["derive", "env"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
+sqlx = { version = "0.8", default-features = false, features = [
+    "runtime-tokio", "tls-rustls", "postgres", "uuid", "chrono", "json", "macros", "migrate",
+] }
+uuid = { version = "1", features = ["v4", "serde"] }
+chrono = { version = "0.4", features = ["serde"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+base64 = "0.22"
+x25519-dalek = { version = "2", features = ["static_secrets"] }
+url = "2"
+tokio-rustls = { version = "0.26", default-features = false, features = ["ring", "tls12", "logging"] }
+rustls-pemfile = "2"
+hyper-util = { version = "0.1", features = ["tokio"] }
+tower = { version = "0.5", features = ["util"] }
+x509-parser = "0.16"
+chacha20poly1305 = { version = "0.10", default-features = false, features = ["alloc"] }
+getrandom = "0.2"
+argon2 = "0.5"
+sha2 = "0.10"
+totp-rs = { version = "5", default-features = false, features = ["otpauth", "gen_secret"] }
+ipnet = "2"
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+qrcode = { version = "0.14", default-features = false, features = ["svg"] }
+
+# dial-mode acceptor only (nodes behind NAT dial in). optional so the extra,
+# version-sensitive deps can't affect the default build. tokio-rustls itself is
+# non-optional now (the managed-domain cert probe uses it).
+rustls = { version = "0.23", default-features = false, features = ["ring"], optional = true }
+
+# built-in https for the api/panel (single-server, no nginx). optional so the
+# rustls stack can't affect the default (behind-a-proxy) build.
+axum-server = { version = "0.7", features = ["tls-rustls"], optional = true }
+# built-in acme (TLS-ALPN-01) for a master on its own domain — version-sensitive,
+# kept fully optional.
+rustls-acme = { version = "0.13", features = ["axum"], optional = true }
+futures-util = { version = "0.3", optional = true }
+
+[features]
+dial-acceptor = ["dep:rustls"]
+tls = ["dep:axum-server", "dep:rustls"]
+acme = ["tls", "dep:rustls-acme", "dep:futures-util"]
+
+[build-dependencies]
+tonic-build = "0.12"
+protoc-bin-vendored = "3"

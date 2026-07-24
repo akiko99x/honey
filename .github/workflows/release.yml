@@ -1,0 +1,63 @@
+name: release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+permissions:
+  contents: write
+
+jobs:
+  linux-amd64:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: agent/go.mod
+          cache-dependency-path: agent/go.sum
+      - name: Rust toolchain
+        run: rustup update stable && rustup default stable
+      - name: Verify tag matches Cargo package version
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          cargo_version="$(sed -n 's/^version = "\([^"]*\)"/\1/p' master/Cargo.toml | head -1)"
+          test "$version" = "$cargo_version"
+      - name: Test
+        run: |
+          (cd agent && go test ./...)
+          (cd master && cargo fmt -- --check && cargo test --locked)
+          node --check web/app.js
+          bash -n scripts/*.sh
+      - name: Build Linux binaries
+        env:
+          CGO_ENABLED: "0"
+          GOOS: linux
+          GOARCH: amd64
+        run: |
+          mkdir -p build
+          cargo build --locked --release --manifest-path master/Cargo.toml --features dial-acceptor,acme
+          cp master/target/release/honey-master build/honey-master
+          (cd agent && go build -trimpath -ldflags='-s -w' -o ../build/honey-agent ./cmd/agent)
+          (cd agent && go build -trimpath -ldflags='-s -w' -o ../build/honey-enroll ./cmd/enroll)
+      - name: Package checksummed archive
+        run: |
+          bash scripts/package-release.sh "$GITHUB_REF_NAME" \
+            build/honey-master build/honey-agent build/honey-enroll dist
+          install -m 0755 build/honey-master \
+            "dist/honey-master-linux-x86_64"
+          (
+            cd dist
+            sha256sum honey-master-linux-x86_64 \
+              honey-*.tar.gz > SHA256SUMS
+          )
+      - name: Publish GitHub release assets
+        uses: softprops/action-gh-release@v3
+        with:
+          generate_release_notes: true
+          files: |
+            dist/*.tar.gz
+            dist/*.sha256
+            dist/honey-master-linux-x86_64
+            dist/SHA256SUMS

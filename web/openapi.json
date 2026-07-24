@@ -1,0 +1,2074 @@
+{
+    "openapi":  "3.0.3",
+    "info":  {
+                 "title":  "honey master API",
+                 "version":  "0.0.0",
+                 "description":  "Stable automation surface for honey. Create a named key in Settings, store the hny_ token once, and send it as Authorization: Bearer \u003ctoken\u003e. API keys use the same owner/admin/operator/viewer permission ladder as panel accounts."
+             },
+    "servers":  [
+                    {
+                        "url":  "/"
+                    }
+                ],
+    "security":  [
+                     {
+                         "bearerAuth":  [
+
+                                        ]
+                     }
+                 ],
+    "tags":  [
+                 {
+                     "name":  "system"
+                 },
+                 {
+                     "name":  "api keys"
+                 },
+                 {
+                     "name":  "nodes"
+                 },
+                 {
+                     "name":  "inbounds"
+                 },
+                 {
+                     "name":  "users"
+                 },
+                 {
+                     "name":  "groups"
+                 },
+                 {
+                     "name":  "domains"
+                 },
+                 {
+                     "name":  "routing"
+                 }
+             ],
+    "paths":  {
+                  "/health":  {
+                                  "get":  {
+                                              "tags":  [
+                                                           "system"
+                                                       ],
+                                              "summary":  "Process liveness",
+                                              "security":  [
+
+                                                           ],
+                                              "responses":  {
+                                                                "200":  {
+                                                                            "description":  "Master process is running"
+                                                                        }
+                                                            }
+                                          }
+                              },
+                  "/ready":  {
+                                 "get":  {
+                                             "tags":  [
+                                                          "system"
+                                                      ],
+                                             "summary":  "Database readiness",
+                                             "security":  [
+
+                                                          ],
+                                             "responses":  {
+                                                               "200":  {
+                                                                           "description":  "Master and database are ready"
+                                                                       },
+                                                               "503":  {
+                                                                           "description":  "Database is unavailable"
+                                                                       }
+                                                           }
+                                         }
+                             },
+                  "/auth/me":  {
+                                   "get":  {
+                                               "tags":  [
+                                                            "system"
+                                                        ],
+                                               "summary":  "Current bearer identity",
+                                               "responses":  {
+                                                                 "200":  {
+                                                                             "description":  "Resolved account or API-key identity",
+                                                                             "content":  {
+                                                                                             "application/json":  {
+                                                                                                                      "schema":  {
+                                                                                                                                     "$ref":  "#/components/schemas/Identity"
+                                                                                                                                 }
+                                                                                                                  }
+                                                                                         }
+                                                                         },
+                                                                 "401":  {
+                                                                             "$ref":  "#/components/responses/Unauthorized"
+                                                                         }
+                                                             }
+                                           }
+                               },
+                  "/api-keys":  {
+                                    "get":  {
+                                                "tags":  [
+                                                             "api keys"
+                                                         ],
+                                                "summary":  "List API keys",
+                                                "description":  "Owner role required. Plaintext tokens are never returned.",
+                                                "responses":  {
+                                                                  "200":  {
+                                                                              "description":  "Keys ordered newest first",
+                                                                              "content":  {
+                                                                                              "application/json":  {
+                                                                                                                       "schema":  {
+                                                                                                                                      "type":  "array",
+                                                                                                                                      "items":  {
+                                                                                                                                                    "$ref":  "#/components/schemas/ApiKey"
+                                                                                                                                                }
+                                                                                                                                  }
+                                                                                                                   }
+                                                                                          }
+                                                                          },
+                                                                  "401":  {
+                                                                              "$ref":  "#/components/responses/Unauthorized"
+                                                                          },
+                                                                  "403":  {
+                                                                              "$ref":  "#/components/responses/Forbidden"
+                                                                          }
+                                                              }
+                                            },
+                                    "post":  {
+                                                 "tags":  [
+                                                              "api keys"
+                                                          ],
+                                                 "summary":  "Create API key",
+                                                 "description":  "Owner role required. The token is returned exactly once.",
+                                                 "requestBody":  {
+                                                                     "required":  true,
+                                                                     "content":  {
+                                                                                     "application/json":  {
+                                                                                                              "schema":  {
+                                                                                                                             "$ref":  "#/components/schemas/NewApiKey"
+                                                                                                                         }
+                                                                                                          }
+                                                                                 }
+                                                                 },
+                                                 "responses":  {
+                                                                   "200":  {
+                                                                               "description":  "Created key and one-time token",
+                                                                               "content":  {
+                                                                                               "application/json":  {
+                                                                                                                        "schema":  {
+                                                                                                                                       "$ref":  "#/components/schemas/CreatedApiKey"
+                                                                                                                                   }
+                                                                                                                    }
+                                                                                           }
+                                                                           },
+                                                                   "400":  {
+                                                                               "$ref":  "#/components/responses/BadRequest"
+                                                                           },
+                                                                   "401":  {
+                                                                               "$ref":  "#/components/responses/Unauthorized"
+                                                                           },
+                                                                   "403":  {
+                                                                               "$ref":  "#/components/responses/Forbidden"
+                                                                           }
+                                                               }
+                                             }
+                                },
+                  "/api-keys/{id}":  {
+                                         "delete":  {
+                                                        "tags":  [
+                                                                     "api keys"
+                                                                 ],
+                                                        "summary":  "Revoke API key",
+                                                        "description":  "Owner role required. Revocation is immediate.",
+                                                        "parameters":  [
+                                                                           {
+                                                                               "$ref":  "#/components/parameters/Id"
+                                                                           }
+                                                                       ],
+                                                        "responses":  {
+                                                                          "204":  {
+                                                                                      "description":  "Revoked"
+                                                                                  },
+                                                                          "401":  {
+                                                                                      "$ref":  "#/components/responses/Unauthorized"
+                                                                                  },
+                                                                          "403":  {
+                                                                                      "$ref":  "#/components/responses/Forbidden"
+                                                                                  },
+                                                                          "404":  {
+                                                                                      "$ref":  "#/components/responses/NotFound"
+                                                                                  }
+                                                                      }
+                                                    }
+                                     },
+                  "/nodes":  {
+                                 "get":  {
+                                             "tags":  [
+                                                          "nodes"
+                                                      ],
+                                             "summary":  "List nodes",
+                                             "responses":  {
+                                                               "200":  {
+                                                                           "description":  "Known nodes",
+                                                                           "content":  {
+                                                                                           "application/json":  {
+                                                                                                                    "schema":  {
+                                                                                                                                   "type":  "array",
+                                                                                                                                   "items":  {
+                                                                                                                                                 "$ref":  "#/components/schemas/Node"
+                                                                                                                                             }
+                                                                                                                               }
+                                                                                                                }
+                                                                                       }
+                                                                       },
+                                                               "401":  {
+                                                                           "$ref":  "#/components/responses/Unauthorized"
+                                                                       }
+                                                           }
+                                         },
+                                 "post":  {
+                                              "tags":  [
+                                                           "nodes"
+                                                       ],
+                                              "summary":  "Create node",
+                                              "description":  "Admin role required.",
+                                              "requestBody":  {
+                                                                  "required":  true,
+                                                                  "content":  {
+                                                                                  "application/json":  {
+                                                                                                           "schema":  {
+                                                                                                                          "$ref":  "#/components/schemas/NewNode"
+                                                                                                                      }
+                                                                                                       }
+                                                                              }
+                                                              },
+                                              "responses":  {
+                                                                "200":  {
+                                                                            "description":  "Created node",
+                                                                            "content":  {
+                                                                                            "application/json":  {
+                                                                                                                     "schema":  {
+                                                                                                                                    "$ref":  "#/components/schemas/Node"
+                                                                                                                                }
+                                                                                                                 }
+                                                                                        }
+                                                                        },
+                                                                "400":  {
+                                                                            "$ref":  "#/components/responses/BadRequest"
+                                                                        },
+                                                                "403":  {
+                                                                            "$ref":  "#/components/responses/Forbidden"
+                                                                        }
+                                                            }
+                                          }
+                             },
+                  "/nodes/{id}":  {
+                                      "get":  {
+                                                  "tags":  [
+                                                               "nodes"
+                                                           ],
+                                                  "summary":  "Get node",
+                                                  "parameters":  [
+                                                                     {
+                                                                         "$ref":  "#/components/parameters/Id"
+                                                                     }
+                                                                 ],
+                                                  "responses":  {
+                                                                    "200":  {
+                                                                                "description":  "Node",
+                                                                                "content":  {
+                                                                                                "application/json":  {
+                                                                                                                         "schema":  {
+                                                                                                                                        "$ref":  "#/components/schemas/Node"
+                                                                                                                                    }
+                                                                                                                     }
+                                                                                            }
+                                                                            },
+                                                                    "404":  {
+                                                                                "$ref":  "#/components/responses/NotFound"
+                                                                            }
+                                                                }
+                                              },
+                                      "patch":  {
+                                                    "tags":  [
+                                                                 "nodes"
+                                                             ],
+                                                    "summary":  "Update node",
+                                                    "description":  "Admin role required.",
+                                                    "parameters":  [
+                                                                       {
+                                                                           "$ref":  "#/components/parameters/Id"
+                                                                       }
+                                                                   ],
+                                                    "requestBody":  {
+                                                                        "required":  true,
+                                                                        "content":  {
+                                                                                        "application/json":  {
+                                                                                                                 "schema":  {
+                                                                                                                                "type":  "object",
+                                                                                                                                "additionalProperties":  true
+                                                                                                                            }
+                                                                                                             }
+                                                                                    }
+                                                                    },
+                                                    "responses":  {
+                                                                      "200":  {
+                                                                                  "description":  "Updated node",
+                                                                                  "content":  {
+                                                                                                  "application/json":  {
+                                                                                                                           "schema":  {
+                                                                                                                                          "$ref":  "#/components/schemas/Node"
+                                                                                                                                      }
+                                                                                                                       }
+                                                                                              }
+                                                                              },
+                                                                      "400":  {
+                                                                                  "$ref":  "#/components/responses/BadRequest"
+                                                                              },
+                                                                      "403":  {
+                                                                                  "$ref":  "#/components/responses/Forbidden"
+                                                                              },
+                                                                      "404":  {
+                                                                                  "$ref":  "#/components/responses/NotFound"
+                                                                              }
+                                                                  }
+                                                },
+                                      "delete":  {
+                                                     "tags":  [
+                                                                  "nodes"
+                                                              ],
+                                                     "summary":  "Delete node",
+                                                     "description":  "Admin role required.",
+                                                     "parameters":  [
+                                                                        {
+                                                                            "$ref":  "#/components/parameters/Id"
+                                                                        }
+                                                                    ],
+                                                     "responses":  {
+                                                                       "204":  {
+                                                                                   "description":  "Deleted"
+                                                                               },
+                                                                       "403":  {
+                                                                                   "$ref":  "#/components/responses/Forbidden"
+                                                                               },
+                                                                       "404":  {
+                                                                                   "$ref":  "#/components/responses/NotFound"
+                                                                               }
+                                                                   }
+                                                 }
+                                  },
+                  "/nodes/{id}/inbounds":  {
+                                               "get":  {
+                                                           "tags":  [
+                                                                        "inbounds"
+                                                                    ],
+                                                           "summary":  "List node inbounds",
+                                                           "parameters":  [
+                                                                              {
+                                                                                  "$ref":  "#/components/parameters/Id"
+                                                                              }
+                                                                          ],
+                                                           "responses":  {
+                                                                             "200":  {
+                                                                                         "description":  "Inbounds",
+                                                                                         "content":  {
+                                                                                                         "application/json":  {
+                                                                                                                                  "schema":  {
+                                                                                                                                                 "type":  "array",
+                                                                                                                                                 "items":  {
+                                                                                                                                                               "$ref":  "#/components/schemas/Inbound"
+                                                                                                                                                           }
+                                                                                                                                             }
+                                                                                                                              }
+                                                                                                     }
+                                                                                     },
+                                                                             "404":  {
+                                                                                         "$ref":  "#/components/responses/NotFound"
+                                                                                     }
+                                                                         }
+                                                       }
+                                           },
+                  "/nodes/{id}/config-preview":  {
+                                                     "get":  {
+                                                                 "tags":  [
+                                                                              "nodes"
+                                                                          ],
+                                                                 "summary":  "Preview desired config diff",
+                                                                 "parameters":  [
+                                                                                    {
+                                                                                        "$ref":  "#/components/parameters/Id"
+                                                                                    }
+                                                                                ],
+                                                                 "responses":  {
+                                                                                   "200":  {
+                                                                                               "description":  "Sanitized structural preview",
+                                                                                               "content":  {
+                                                                                                               "application/json":  {
+                                                                                                                                        "schema":  {
+                                                                                                                                                       "type":  "object",
+                                                                                                                                                       "additionalProperties":  true
+                                                                                                                                                   }
+                                                                                                                                    }
+                                                                                                           }
+                                                                                           },
+                                                                                   "404":  {
+                                                                                               "$ref":  "#/components/responses/NotFound"
+                                                                                           }
+                                                                               }
+                                                             }
+                                                 },
+                  "/nodes/{id}/dry-run":  {
+                                              "post":  {
+                                                           "tags":  [
+                                                                        "nodes"
+                                                                    ],
+                                                           "summary":  "Validate desired config on agent",
+                                                           "description":  "Operator role required. Does not change live config or processes.",
+                                                           "parameters":  [
+                                                                              {
+                                                                                  "$ref":  "#/components/parameters/Id"
+                                                                              }
+                                                                          ],
+                                                           "responses":  {
+                                                                             "200":  {
+                                                                                         "description":  "Agent validation result",
+                                                                                         "content":  {
+                                                                                                         "application/json":  {
+                                                                                                                                  "schema":  {
+                                                                                                                                                 "type":  "object",
+                                                                                                                                                 "additionalProperties":  true
+                                                                                                                                             }
+                                                                                                                              }
+                                                                                                     }
+                                                                                     },
+                                                                             "403":  {
+                                                                                         "$ref":  "#/components/responses/Forbidden"
+                                                                                     },
+                                                                             "404":  {
+                                                                                         "$ref":  "#/components/responses/NotFound"
+                                                                                     },
+                                                                             "502":  {
+                                                                                         "$ref":  "#/components/responses/Upstream"
+                                                                                     }
+                                                                         }
+                                                       }
+                                          },
+                  "/nodes/{id}/push":  {
+                                           "post":  {
+                                                        "tags":  [
+                                                                     "nodes"
+                                                                 ],
+                                                        "summary":  "Push desired config",
+                                                        "description":  "Operator role required.",
+                                                        "parameters":  [
+                                                                           {
+                                                                               "$ref":  "#/components/parameters/Id"
+                                                                           }
+                                                                       ],
+                                                        "responses":  {
+                                                                          "200":  {
+                                                                                      "description":  "Apply result",
+                                                                                      "content":  {
+                                                                                                      "application/json":  {
+                                                                                                                               "schema":  {
+                                                                                                                                              "type":  "object",
+                                                                                                                                              "additionalProperties":  true
+                                                                                                                                          }
+                                                                                                                           }
+                                                                                                  }
+                                                                                  },
+                                                                          "403":  {
+                                                                                      "$ref":  "#/components/responses/Forbidden"
+                                                                                  },
+                                                                          "404":  {
+                                                                                      "$ref":  "#/components/responses/NotFound"
+                                                                                  },
+                                                                          "502":  {
+                                                                                      "$ref":  "#/components/responses/Upstream"
+                                                                                  }
+                                                                      }
+                                                    }
+                                       },
+                  "/inbounds":  {
+                                    "post":  {
+                                                 "tags":  [
+                                                              "inbounds"
+                                                          ],
+                                                 "summary":  "Create inbound",
+                                                 "description":  "Admin role required.",
+                                                 "requestBody":  {
+                                                                     "required":  true,
+                                                                     "content":  {
+                                                                                     "application/json":  {
+                                                                                                              "schema":  {
+                                                                                                                             "$ref":  "#/components/schemas/NewInbound"
+                                                                                                                         }
+                                                                                                          }
+                                                                                 }
+                                                                 },
+                                                 "responses":  {
+                                                                   "200":  {
+                                                                               "description":  "Created inbound",
+                                                                               "content":  {
+                                                                                               "application/json":  {
+                                                                                                                        "schema":  {
+                                                                                                                                       "$ref":  "#/components/schemas/Inbound"
+                                                                                                                                   }
+                                                                                                                    }
+                                                                                           }
+                                                                           },
+                                                                   "400":  {
+                                                                               "$ref":  "#/components/responses/BadRequest"
+                                                                           },
+                                                                   "403":  {
+                                                                               "$ref":  "#/components/responses/Forbidden"
+                                                                           }
+                                                               }
+                                             }
+                                },
+                  "/inbounds/{id}":  {
+                                         "get":  {
+                                                     "tags":  [
+                                                                  "inbounds"
+                                                              ],
+                                                     "summary":  "Get inbound",
+                                                     "parameters":  [
+                                                                        {
+                                                                            "$ref":  "#/components/parameters/Id"
+                                                                        }
+                                                                    ],
+                                                     "responses":  {
+                                                                       "200":  {
+                                                                                   "description":  "Inbound with secrets removed",
+                                                                                   "content":  {
+                                                                                                   "application/json":  {
+                                                                                                                            "schema":  {
+                                                                                                                                           "$ref":  "#/components/schemas/Inbound"
+                                                                                                                                       }
+                                                                                                                        }
+                                                                                               }
+                                                                               },
+                                                                       "404":  {
+                                                                                   "$ref":  "#/components/responses/NotFound"
+                                                                               }
+                                                                   }
+                                                 },
+                                         "patch":  {
+                                                       "tags":  [
+                                                                    "inbounds"
+                                                                ],
+                                                       "summary":  "Update inbound",
+                                                       "description":  "Admin role required.",
+                                                       "parameters":  [
+                                                                          {
+                                                                              "$ref":  "#/components/parameters/Id"
+                                                                          }
+                                                                      ],
+                                                       "requestBody":  {
+                                                                           "required":  true,
+                                                                           "content":  {
+                                                                                           "application/json":  {
+                                                                                                                    "schema":  {
+                                                                                                                                   "type":  "object",
+                                                                                                                                   "additionalProperties":  true
+                                                                                                                               }
+                                                                                                                }
+                                                                                       }
+                                                                       },
+                                                       "responses":  {
+                                                                         "200":  {
+                                                                                     "description":  "Updated inbound",
+                                                                                     "content":  {
+                                                                                                     "application/json":  {
+                                                                                                                              "schema":  {
+                                                                                                                                             "$ref":  "#/components/schemas/Inbound"
+                                                                                                                                         }
+                                                                                                                          }
+                                                                                                 }
+                                                                                 },
+                                                                         "400":  {
+                                                                                     "$ref":  "#/components/responses/BadRequest"
+                                                                                 },
+                                                                         "403":  {
+                                                                                     "$ref":  "#/components/responses/Forbidden"
+                                                                                 },
+                                                                         "404":  {
+                                                                                     "$ref":  "#/components/responses/NotFound"
+                                                                                 }
+                                                                     }
+                                                   },
+                                         "delete":  {
+                                                        "tags":  [
+                                                                     "inbounds"
+                                                                 ],
+                                                        "summary":  "Delete inbound",
+                                                        "description":  "Admin role required.",
+                                                        "parameters":  [
+                                                                           {
+                                                                               "$ref":  "#/components/parameters/Id"
+                                                                           }
+                                                                       ],
+                                                        "responses":  {
+                                                                          "204":  {
+                                                                                      "description":  "Deleted"
+                                                                                  },
+                                                                          "403":  {
+                                                                                      "$ref":  "#/components/responses/Forbidden"
+                                                                                  },
+                                                                          "404":  {
+                                                                                      "$ref":  "#/components/responses/NotFound"
+                                                                                  }
+                                                                      }
+                                                    }
+                                     },
+                  "/users":  {
+                                 "get":  {
+                                             "tags":  [
+                                                          "users"
+                                                      ],
+                                             "summary":  "List visible users",
+                                             "responses":  {
+                                                               "200":  {
+                                                                           "description":  "Users in caller scope",
+                                                                           "content":  {
+                                                                                           "application/json":  {
+                                                                                                                    "schema":  {
+                                                                                                                                   "type":  "array",
+                                                                                                                                   "items":  {
+                                                                                                                                                 "$ref":  "#/components/schemas/User"
+                                                                                                                                             }
+                                                                                                                               }
+                                                                                                                }
+                                                                                       }
+                                                                       }
+                                                           }
+                                         },
+                                 "post":  {
+                                              "tags":  [
+                                                           "users"
+                                                       ],
+                                              "summary":  "Create user",
+                                              "description":  "Admin role, or reseller-owned scope.",
+                                              "requestBody":  {
+                                                                  "required":  true,
+                                                                  "content":  {
+                                                                                  "application/json":  {
+                                                                                                           "schema":  {
+                                                                                                                          "$ref":  "#/components/schemas/NewUser"
+                                                                                                                      }
+                                                                                                       }
+                                                                              }
+                                                              },
+                                              "responses":  {
+                                                                "200":  {
+                                                                            "description":  "Created user",
+                                                                            "content":  {
+                                                                                            "application/json":  {
+                                                                                                                     "schema":  {
+                                                                                                                                    "$ref":  "#/components/schemas/User"
+                                                                                                                                }
+                                                                                                                 }
+                                                                                        }
+                                                                        },
+                                                                "400":  {
+                                                                            "$ref":  "#/components/responses/BadRequest"
+                                                                        },
+                                                                "403":  {
+                                                                            "$ref":  "#/components/responses/Forbidden"
+                                                                        }
+                                                            }
+                                          }
+                             },
+                  "/users/{id}":  {
+                                      "get":  {
+                                                  "tags":  [
+                                                               "users"
+                                                           ],
+                                                  "summary":  "Get user",
+                                                  "parameters":  [
+                                                                     {
+                                                                         "$ref":  "#/components/parameters/Id"
+                                                                     }
+                                                                 ],
+                                                  "responses":  {
+                                                                    "200":  {
+                                                                                "description":  "User",
+                                                                                "content":  {
+                                                                                                "application/json":  {
+                                                                                                                         "schema":  {
+                                                                                                                                        "$ref":  "#/components/schemas/User"
+                                                                                                                                    }
+                                                                                                                     }
+                                                                                            }
+                                                                            },
+                                                                    "404":  {
+                                                                                "$ref":  "#/components/responses/NotFound"
+                                                                            }
+                                                                }
+                                              },
+                                      "patch":  {
+                                                    "tags":  [
+                                                                 "users"
+                                                             ],
+                                                    "summary":  "Update user",
+                                                    "parameters":  [
+                                                                       {
+                                                                           "$ref":  "#/components/parameters/Id"
+                                                                       }
+                                                                   ],
+                                                    "requestBody":  {
+                                                                        "required":  true,
+                                                                        "content":  {
+                                                                                        "application/json":  {
+                                                                                                                 "schema":  {
+                                                                                                                                "type":  "object",
+                                                                                                                                "additionalProperties":  true
+                                                                                                                            }
+                                                                                                             }
+                                                                                    }
+                                                                    },
+                                                    "responses":  {
+                                                                      "200":  {
+                                                                                  "description":  "Updated user",
+                                                                                  "content":  {
+                                                                                                  "application/json":  {
+                                                                                                                           "schema":  {
+                                                                                                                                          "$ref":  "#/components/schemas/User"
+                                                                                                                                      }
+                                                                                                                       }
+                                                                                              }
+                                                                              },
+                                                                      "400":  {
+                                                                                  "$ref":  "#/components/responses/BadRequest"
+                                                                              },
+                                                                      "403":  {
+                                                                                  "$ref":  "#/components/responses/Forbidden"
+                                                                              },
+                                                                      "404":  {
+                                                                                  "$ref":  "#/components/responses/NotFound"
+                                                                              }
+                                                                  }
+                                                },
+                                      "delete":  {
+                                                     "tags":  [
+                                                                  "users"
+                                                              ],
+                                                     "summary":  "Delete user",
+                                                     "description":  "Admin role, or reseller-owned scope.",
+                                                     "parameters":  [
+                                                                        {
+                                                                            "$ref":  "#/components/parameters/Id"
+                                                                        }
+                                                                    ],
+                                                     "responses":  {
+                                                                       "204":  {
+                                                                                   "description":  "Deleted"
+                                                                               },
+                                                                       "403":  {
+                                                                                   "$ref":  "#/components/responses/Forbidden"
+                                                                               },
+                                                                       "404":  {
+                                                                                   "$ref":  "#/components/responses/NotFound"
+                                                                               }
+                                                                   }
+                                                 }
+                                  },
+                  "/users/{id}/rotate":  {
+                                             "post":  {
+                                                          "tags":  [
+                                                                       "users"
+                                                                   ],
+                                                          "summary":  "Rotate user credentials",
+                                                          "description":  "Operator role required.",
+                                                          "parameters":  [
+                                                                             {
+                                                                                 "$ref":  "#/components/parameters/Id"
+                                                                             }
+                                                                         ],
+                                                          "responses":  {
+                                                                            "200":  {
+                                                                                        "description":  "Fresh credentials; sensitive values may be shown once",
+                                                                                        "content":  {
+                                                                                                        "application/json":  {
+                                                                                                                                 "schema":  {
+                                                                                                                                                "$ref":  "#/components/schemas/User"
+                                                                                                                                            }
+                                                                                                                             }
+                                                                                                    }
+                                                                                    },
+                                                                            "403":  {
+                                                                                        "$ref":  "#/components/responses/Forbidden"
+                                                                                    },
+                                                                            "404":  {
+                                                                                        "$ref":  "#/components/responses/NotFound"
+                                                                                    }
+                                                                        }
+                                                      }
+                                         },
+                  "/users/{id}/reset-traffic":  {
+                                                    "post":  {
+                                                                 "tags":  [
+                                                                              "users"
+                                                                          ],
+                                                                 "summary":  "Reset traffic counter",
+                                                                 "description":  "Operator role required.",
+                                                                 "parameters":  [
+                                                                                    {
+                                                                                        "$ref":  "#/components/parameters/Id"
+                                                                                    }
+                                                                                ],
+                                                                 "responses":  {
+                                                                                   "204":  {
+                                                                                               "description":  "Reset"
+                                                                                           },
+                                                                                   "403":  {
+                                                                                               "$ref":  "#/components/responses/Forbidden"
+                                                                                           },
+                                                                                   "404":  {
+                                                                                               "$ref":  "#/components/responses/NotFound"
+                                                                                           }
+                                                                               }
+                                                             }
+                                                },
+                  "/groups":  {
+                                  "get":  {
+                                              "tags":  [
+                                                           "groups"
+                                                       ],
+                                              "summary":  "List groups",
+                                              "responses":  {
+                                                                "200":  {
+                                                                            "description":  "Node/user access groups",
+                                                                            "content":  {
+                                                                                            "application/json":  {
+                                                                                                                     "schema":  {
+                                                                                                                                    "type":  "array",
+                                                                                                                                    "items":  {
+                                                                                                                                                  "$ref":  "#/components/schemas/Group"
+                                                                                                                                              }
+                                                                                                                                }
+                                                                                                                 }
+                                                                                        }
+                                                                        }
+                                                            }
+                                          },
+                                  "post":  {
+                                               "tags":  [
+                                                            "groups"
+                                                        ],
+                                               "summary":  "Create group",
+                                               "description":  "Admin role required.",
+                                               "requestBody":  {
+                                                                   "required":  true,
+                                                                   "content":  {
+                                                                                   "application/json":  {
+                                                                                                            "schema":  {
+                                                                                                                           "type":  "object",
+                                                                                                                           "required":  [
+                                                                                                                                            "name"
+                                                                                                                                        ],
+                                                                                                                           "properties":  {
+                                                                                                                                              "name":  {
+                                                                                                                                                           "type":  "string"
+                                                                                                                                                       }
+                                                                                                                                          }
+                                                                                                                       }
+                                                                                                        }
+                                                                               }
+                                                               },
+                                               "responses":  {
+                                                                 "200":  {
+                                                                             "description":  "Created group",
+                                                                             "content":  {
+                                                                                             "application/json":  {
+                                                                                                                      "schema":  {
+                                                                                                                                     "$ref":  "#/components/schemas/Group"
+                                                                                                                                 }
+                                                                                                                  }
+                                                                                         }
+                                                                         },
+                                                                 "400":  {
+                                                                             "$ref":  "#/components/responses/BadRequest"
+                                                                         },
+                                                                 "403":  {
+                                                                             "$ref":  "#/components/responses/Forbidden"
+                                                                         }
+                                                             }
+                                           }
+                              },
+                  "/domains":  {
+                                   "get":  {
+                                               "tags":  [
+                                                            "domains"
+                                                        ],
+                                               "summary":  "List managed domains",
+                                               "responses":  {
+                                                                 "200":  {
+                                                                             "description":  "Domains",
+                                                                             "content":  {
+                                                                                             "application/json":  {
+                                                                                                                      "schema":  {
+                                                                                                                                     "type":  "array",
+                                                                                                                                     "items":  {
+                                                                                                                                                   "$ref":  "#/components/schemas/Domain"
+                                                                                                                                               }
+                                                                                                                                 }
+                                                                                                                  }
+                                                                                         }
+                                                                         }
+                                                             }
+                                           },
+                                   "post":  {
+                                                "tags":  [
+                                                             "domains"
+                                                         ],
+                                                "summary":  "Create managed domain",
+                                                "description":  "Admin role required.",
+                                                "requestBody":  {
+                                                                    "required":  true,
+                                                                    "content":  {
+                                                                                    "application/json":  {
+                                                                                                             "schema":  {
+                                                                                                                            "$ref":  "#/components/schemas/DomainInput"
+                                                                                                                        }
+                                                                                                         }
+                                                                                }
+                                                                },
+                                                "responses":  {
+                                                                  "200":  {
+                                                                              "description":  "Created domain",
+                                                                              "content":  {
+                                                                                              "application/json":  {
+                                                                                                                       "schema":  {
+                                                                                                                                      "$ref":  "#/components/schemas/Domain"
+                                                                                                                                  }
+                                                                                                                   }
+                                                                                          }
+                                                                          },
+                                                                  "400":  {
+                                                                              "$ref":  "#/components/responses/BadRequest"
+                                                                          },
+                                                                  "403":  {
+                                                                              "$ref":  "#/components/responses/Forbidden"
+                                                                          }
+                                                              }
+                                            }
+                               },
+                  "/domains/{id}/verify":  {
+                                               "post":  {
+                                                            "tags":  [
+                                                                         "domains"
+                                                                     ],
+                                                            "summary":  "Verify DNS, reachability and certificate",
+                                                            "parameters":  [
+                                                                               {
+                                                                                   "$ref":  "#/components/parameters/Id"
+                                                                               }
+                                                                           ],
+                                                            "responses":  {
+                                                                              "200":  {
+                                                                                          "description":  "Updated domain verification",
+                                                                                          "content":  {
+                                                                                                          "application/json":  {
+                                                                                                                                   "schema":  {
+                                                                                                                                                  "$ref":  "#/components/schemas/Domain"
+                                                                                                                                              }
+                                                                                                                               }
+                                                                                                      }
+                                                                                      },
+                                                                              "404":  {
+                                                                                          "$ref":  "#/components/responses/NotFound"
+                                                                                      }
+                                                                          }
+                                                        }
+                                           },
+                  "/routing-profiles":  {
+                                            "get":  {
+                                                        "tags":  [
+                                                                     "routing"
+                                                                 ],
+                                                        "summary":  "List routing profiles",
+                                                        "responses":  {
+                                                                          "200":  {
+                                                                                      "description":  "Profiles",
+                                                                                      "content":  {
+                                                                                                      "application/json":  {
+                                                                                                                               "schema":  {
+                                                                                                                                              "type":  "array",
+                                                                                                                                              "items":  {
+                                                                                                                                                            "$ref":  "#/components/schemas/RoutingProfile"
+                                                                                                                                                        }
+                                                                                                                                          }
+                                                                                                                           }
+                                                                                                  }
+                                                                                  }
+                                                                      }
+                                                    },
+                                            "post":  {
+                                                         "tags":  [
+                                                                      "routing"
+                                                                  ],
+                                                         "summary":  "Create routing profile",
+                                                         "description":  "Admin role required.",
+                                                         "requestBody":  {
+                                                                             "required":  true,
+                                                                             "content":  {
+                                                                                             "application/json":  {
+                                                                                                                      "schema":  {
+                                                                                                                                     "$ref":  "#/components/schemas/RoutingProfileInput"
+                                                                                                                                 }
+                                                                                                                  }
+                                                                                         }
+                                                                         },
+                                                         "responses":  {
+                                                                           "200":  {
+                                                                                       "description":  "Created profile",
+                                                                                       "content":  {
+                                                                                                       "application/json":  {
+                                                                                                                                "schema":  {
+                                                                                                                                               "$ref":  "#/components/schemas/RoutingProfile"
+                                                                                                                                           }
+                                                                                                                            }
+                                                                                                   }
+                                                                                   },
+                                                                           "400":  {
+                                                                                       "$ref":  "#/components/responses/BadRequest"
+                                                                                   },
+                                                                           "403":  {
+                                                                                       "$ref":  "#/components/responses/Forbidden"
+                                                                                   }
+                                                                       }
+                                                     }
+                                        },
+                  "/issues":  {
+                                  "get":  {
+                                              "tags":  [
+                                                           "system"
+                                                       ],
+                                              "summary":  "Fleet health cockpit",
+                                              "responses":  {
+                                                                "200":  {
+                                                                            "description":  "Derived issue report",
+                                                                            "content":  {
+                                                                                            "application/json":  {
+                                                                                                                     "schema":  {
+                                                                                                                                    "type":  "object",
+                                                                                                                                    "additionalProperties":  true
+                                                                                                                                }
+                                                                                                                 }
+                                                                                        }
+                                                                        }
+                                                            }
+                                          }
+                              },
+                  "/onboarding":  {
+                                      "get":  {
+                                                  "tags":  [
+                                                               "system"
+                                                           ],
+                                                  "summary":  "Derived first-run progress",
+                                                  "responses":  {
+                                                                    "200":  {
+                                                                                "description":  "Role-scoped onboarding checklist",
+                                                                                "content":  {
+                                                                                                "application/json":  {
+                                                                                                                         "schema":  {
+                                                                                                                                        "type":  "object",
+                                                                                                                                        "additionalProperties":  true
+                                                                                                                                    }
+                                                                                                                     }
+                                                                                            }
+                                                                            }
+                                                                }
+                                              }
+                                  },
+                  "/system/logs":  {
+                                       "get":  {
+                                                   "tags":  [
+                                                                "system"
+                                                            ],
+                                                   "summary":  "Search bounded master runtime log",
+                                                   "parameters":  [
+                                                                      {
+                                                                          "name":  "limit",
+                                                                          "in":  "query",
+                                                                          "schema":  {
+                                                                                         "type":  "integer",
+                                                                                         "minimum":  1,
+                                                                                         "maximum":  5000,
+                                                                                         "default":  200
+                                                                                     }
+                                                                      },
+                                                                      {
+                                                                          "name":  "level",
+                                                                          "in":  "query",
+                                                                          "schema":  {
+                                                                                         "type":  "string",
+                                                                                         "enum":  [
+                                                                                                      "error",
+                                                                                                      "warn",
+                                                                                                      "info",
+                                                                                                      "debug",
+                                                                                                      "trace"
+                                                                                                  ]
+                                                                                     }
+                                                                      },
+                                                                      {
+                                                                          "name":  "code",
+                                                                          "in":  "query",
+                                                                          "description":  "Exact M#### diagnostic code.",
+                                                                          "schema":  {
+                                                                                         "type":  "string",
+                                                                                         "pattern":  "^M[0-9]{4}$"
+                                                                                     }
+                                                                      },
+                                                                      {
+                                                                          "name":  "q",
+                                                                          "in":  "query",
+                                                                          "description":  "Case-insensitive message, target, field or request_id search.",
+                                                                          "schema":  {
+                                                                                         "type":  "string",
+                                                                                         "maxLength":  128
+                                                                                     }
+                                                                      }
+                                                                  ],
+                                                   "responses":  {
+                                                                     "200":  {
+                                                                                 "description":  "Newest matching records first",
+                                                                                 "content":  {
+                                                                                                 "application/json":  {
+                                                                                                                          "schema":  {
+                                                                                                                                         "type":  "array",
+                                                                                                                                         "items":  {
+                                                                                                                                                       "$ref":  "#/components/schemas/LogRecord"
+                                                                                                                                                   }
+                                                                                                                                     }
+                                                                                                                      }
+                                                                                             }
+                                                                             },
+                                                                     "400":  {
+                                                                                 "$ref":  "#/components/responses/BadRequest"
+                                                                             }
+                                                                 }
+                                               }
+                                   },
+                  "/analytics/traffic":  {
+                                             "get":  {
+                                                         "tags":  [
+                                                                      "analytics"
+                                                                  ],
+                                                         "summary":  "Historical traffic analytics",
+                                                         "description":  "Bounded hourly/day aggregates. Protocol and transport attribution is not inferred from core counters.",
+                                                         "parameters":  [
+                                                                            {
+                                                                                "name":  "from",
+                                                                                "in":  "query",
+                                                                                "schema":  {
+                                                                                               "type":  "string",
+                                                                                               "format":  "date-time"
+                                                                                           }
+                                                                            },
+                                                                            {
+                                                                                "name":  "to",
+                                                                                "in":  "query",
+                                                                                "schema":  {
+                                                                                               "type":  "string",
+                                                                                               "format":  "date-time"
+                                                                                           }
+                                                                            },
+                                                                            {
+                                                                                "name":  "bucket",
+                                                                                "in":  "query",
+                                                                                "schema":  {
+                                                                                               "type":  "string",
+                                                                                               "enum":  [
+                                                                                                            "hour",
+                                                                                                            "day"
+                                                                                                        ]
+                                                                                           }
+                                                                            },
+                                                                            {
+                                                                                "name":  "node_id",
+                                                                                "in":  "query",
+                                                                                "schema":  {
+                                                                                               "type":  "string",
+                                                                                               "format":  "uuid"
+                                                                                           }
+                                                                            },
+                                                                            {
+                                                                                "name":  "user_id",
+                                                                                "in":  "query",
+                                                                                "schema":  {
+                                                                                               "type":  "string",
+                                                                                               "format":  "uuid"
+                                                                                           }
+                                                                            },
+                                                                            {
+                                                                                "name":  "core",
+                                                                                "in":  "query",
+                                                                                "schema":  {
+                                                                                               "type":  "string",
+                                                                                               "enum":  [
+                                                                                                            "singbox",
+                                                                                                            "xray"
+                                                                                                        ]
+                                                                                           }
+                                                                            }
+                                                                        ],
+                                                         "responses":  {
+                                                                           "200":  {
+                                                                                       "description":  "Traffic analytics view",
+                                                                                       "content":  {
+                                                                                                       "application/json":  {
+                                                                                                                                "schema":  {
+                                                                                                                                               "$ref":  "#/components/schemas/TrafficAnalytics"
+                                                                                                                                           }
+                                                                                                                            }
+                                                                                                   }
+                                                                                   },
+                                                                           "400":  {
+                                                                                       "$ref":  "#/components/responses/BadRequest"
+                                                                                   },
+                                                                           "401":  {
+                                                                                       "$ref":  "#/components/responses/Unauthorized"
+                                                                                   },
+                                                                           "403":  {
+                                                                                       "$ref":  "#/components/responses/Forbidden"
+                                                                                   }
+                                                                       }
+                                                     }
+                                         },
+                  "/analytics/traffic.csv":  {
+                                                 "get":  {
+                                                             "tags":  [
+                                                                          "analytics"
+                                                                      ],
+                                                             "summary":  "Export traffic time series as CSV",
+                                                             "parameters":  [
+                                                                                {
+                                                                                    "name":  "from",
+                                                                                    "in":  "query",
+                                                                                    "schema":  {
+                                                                                                   "type":  "string",
+                                                                                                   "format":  "date-time"
+                                                                                               }
+                                                                                },
+                                                                                {
+                                                                                    "name":  "to",
+                                                                                    "in":  "query",
+                                                                                    "schema":  {
+                                                                                                   "type":  "string",
+                                                                                                   "format":  "date-time"
+                                                                                               }
+                                                                                },
+                                                                                {
+                                                                                    "name":  "bucket",
+                                                                                    "in":  "query",
+                                                                                    "schema":  {
+                                                                                                   "type":  "string",
+                                                                                                   "enum":  [
+                                                                                                                "hour",
+                                                                                                                "day"
+                                                                                                            ]
+                                                                                               }
+                                                                                },
+                                                                                {
+                                                                                    "name":  "node_id",
+                                                                                    "in":  "query",
+                                                                                    "schema":  {
+                                                                                                   "type":  "string",
+                                                                                                   "format":  "uuid"
+                                                                                               }
+                                                                                },
+                                                                                {
+                                                                                    "name":  "user_id",
+                                                                                    "in":  "query",
+                                                                                    "schema":  {
+                                                                                                   "type":  "string",
+                                                                                                   "format":  "uuid"
+                                                                                               }
+                                                                                },
+                                                                                {
+                                                                                    "name":  "core",
+                                                                                    "in":  "query",
+                                                                                    "schema":  {
+                                                                                                   "type":  "string",
+                                                                                                   "enum":  [
+                                                                                                                "singbox",
+                                                                                                                "xray"
+                                                                                                            ]
+                                                                                               }
+                                                                                }
+                                                                            ],
+                                                             "responses":  {
+                                                                               "200":  {
+                                                                                           "description":  "CSV time series",
+                                                                                           "content":  {
+                                                                                                           "text/csv":  {
+                                                                                                                            "schema":  {
+                                                                                                                                           "type":  "string",
+                                                                                                                                           "format":  "binary"
+                                                                                                                                       }
+                                                                                                                        }
+                                                                                                       }
+                                                                                       },
+                                                                               "400":  {
+                                                                                           "$ref":  "#/components/responses/BadRequest"
+                                                                                       },
+                                                                               "401":  {
+                                                                                           "$ref":  "#/components/responses/Unauthorized"
+                                                                                       },
+                                                                               "403":  {
+                                                                                           "$ref":  "#/components/responses/Forbidden"
+                                                                                       }
+                                                                           }
+                                                         }
+                                             }
+              },
+    "components":  {
+                       "securitySchemes":  {
+                                               "bearerAuth":  {
+                                                                  "type":  "http",
+                                                                  "scheme":  "bearer",
+                                                                  "bearerFormat":  "hny_*"
+                                                              }
+                                           },
+                       "parameters":  {
+                                          "Id":  {
+                                                     "name":  "id",
+                                                     "in":  "path",
+                                                     "required":  true,
+                                                     "schema":  {
+                                                                    "type":  "string",
+                                                                    "format":  "uuid"
+                                                                }
+                                                 }
+                                      },
+                       "schemas":  {
+                                       "Identity":  {
+                                                        "type":  "object",
+                                                        "required":  [
+                                                                         "username",
+                                                                         "role"
+                                                                     ],
+                                                        "properties":  {
+                                                                           "admin_id":  {
+                                                                                            "type":  "string",
+                                                                                            "format":  "uuid",
+                                                                                            "nullable":  true
+                                                                                        },
+                                                                           "username":  {
+                                                                                            "type":  "string"
+                                                                                        },
+                                                                           "role":  {
+                                                                                        "$ref":  "#/components/schemas/Role"
+                                                                                    }
+                                                                       }
+                                                    },
+                                       "Role":  {
+                                                    "type":  "string",
+                                                    "enum":  [
+                                                                 "owner",
+                                                                 "admin",
+                                                                 "operator",
+                                                                 "viewer"
+                                                             ]
+                                                },
+                                       "ApiKey":  {
+                                                      "type":  "object",
+                                                      "required":  [
+                                                                       "id",
+                                                                       "name",
+                                                                       "role",
+                                                                       "status",
+                                                                       "created_at"
+                                                                   ],
+                                                      "properties":  {
+                                                                         "id":  {
+                                                                                    "type":  "string",
+                                                                                    "format":  "uuid"
+                                                                                },
+                                                                         "name":  {
+                                                                                      "type":  "string",
+                                                                                      "maxLength":  64
+                                                                                  },
+                                                                         "role":  {
+                                                                                      "$ref":  "#/components/schemas/Role"
+                                                                                  },
+                                                                         "status":  {
+                                                                                        "type":  "string",
+                                                                                        "enum":  [
+                                                                                                     "active",
+                                                                                                     "expired",
+                                                                                                     "revoked"
+                                                                                                 ]
+                                                                                    },
+                                                                         "created_by":  {
+                                                                                            "type":  "string",
+                                                                                            "format":  "uuid",
+                                                                                            "nullable":  true
+                                                                                        },
+                                                                         "last_used_at":  {
+                                                                                              "type":  "string",
+                                                                                              "format":  "date-time",
+                                                                                              "nullable":  true
+                                                                                          },
+                                                                         "expires_at":  {
+                                                                                            "type":  "string",
+                                                                                            "format":  "date-time",
+                                                                                            "nullable":  true
+                                                                                        },
+                                                                         "revoked_at":  {
+                                                                                            "type":  "string",
+                                                                                            "format":  "date-time",
+                                                                                            "nullable":  true
+                                                                                        },
+                                                                         "created_at":  {
+                                                                                            "type":  "string",
+                                                                                            "format":  "date-time"
+                                                                                        }
+                                                                     }
+                                                  },
+                                       "NewApiKey":  {
+                                                         "type":  "object",
+                                                         "required":  [
+                                                                          "name"
+                                                                      ],
+                                                         "properties":  {
+                                                                            "name":  {
+                                                                                         "type":  "string",
+                                                                                         "minLength":  1,
+                                                                                         "maxLength":  64
+                                                                                     },
+                                                                            "role":  {
+                                                                                         "$ref":  "#/components/schemas/Role"
+                                                                                     },
+                                                                            "expires_days":  {
+                                                                                                 "type":  "integer",
+                                                                                                 "minimum":  0,
+                                                                                                 "maximum":  3650,
+                                                                                                 "default":  0
+                                                                                             }
+                                                                        }
+                                                     },
+                                       "CreatedApiKey":  {
+                                                             "allOf":  [
+                                                                           {
+                                                                               "$ref":  "#/components/schemas/ApiKey"
+                                                                           },
+                                                                           {
+                                                                               "type":  "object",
+                                                                               "required":  [
+                                                                                                "token"
+                                                                                            ],
+                                                                               "properties":  {
+                                                                                                  "token":  {
+                                                                                                                "type":  "string",
+                                                                                                                "writeOnly":  true,
+                                                                                                                "pattern":  "^hny_"
+                                                                                                            }
+                                                                                              }
+                                                                           }
+                                                                       ]
+                                                         },
+                                       "Node":  {
+                                                    "type":  "object",
+                                                    "required":  [
+                                                                     "id",
+                                                                     "name",
+                                                                     "address",
+                                                                     "grpc_port",
+                                                                     "transport",
+                                                                     "enabled"
+                                                                 ],
+                                                    "properties":  {
+                                                                       "id":  {
+                                                                                  "type":  "string",
+                                                                                  "format":  "uuid"
+                                                                              },
+                                                                       "name":  {
+                                                                                    "type":  "string"
+                                                                                },
+                                                                       "address":  {
+                                                                                       "type":  "string"
+                                                                                   },
+                                                                       "grpc_port":  {
+                                                                                         "type":  "integer"
+                                                                                     },
+                                                                       "transport":  {
+                                                                                         "type":  "string",
+                                                                                         "enum":  [
+                                                                                                      "serve",
+                                                                                                      "dial",
+                                                                                                      "both"
+                                                                                                  ]
+                                                                                     },
+                                                                       "enabled":  {
+                                                                                       "type":  "boolean"
+                                                                                   },
+                                                                       "last_seen":  {
+                                                                                         "type":  "string",
+                                                                                         "format":  "date-time",
+                                                                                         "nullable":  true
+                                                                                     }
+                                                                   },
+                                                    "additionalProperties":  true
+                                                },
+                                       "NewNode":  {
+                                                       "type":  "object",
+                                                       "required":  [
+                                                                        "name",
+                                                                        "address"
+                                                                    ],
+                                                       "properties":  {
+                                                                          "name":  {
+                                                                                       "type":  "string"
+                                                                                   },
+                                                                          "address":  {
+                                                                                          "type":  "string"
+                                                                                      },
+                                                                          "grpc_port":  {
+                                                                                            "type":  "integer",
+                                                                                            "default":  8443
+                                                                                        },
+                                                                          "transport":  {
+                                                                                            "type":  "string",
+                                                                                            "enum":  [
+                                                                                                         "serve",
+                                                                                                         "dial",
+                                                                                                         "both"
+                                                                                                     ],
+                                                                                            "default":  "serve"
+                                                                                        },
+                                                                          "tls_server_name":  {
+                                                                                                  "type":  "string"
+                                                                                              }
+                                                                      },
+                                                       "additionalProperties":  true
+                                                   },
+                                       "Inbound":  {
+                                                       "type":  "object",
+                                                       "required":  [
+                                                                        "id",
+                                                                        "node_id",
+                                                                        "tag",
+                                                                        "kind",
+                                                                        "listen_port",
+                                                                        "core",
+                                                                        "enabled"
+                                                                    ],
+                                                       "properties":  {
+                                                                          "id":  {
+                                                                                     "type":  "string",
+                                                                                     "format":  "uuid"
+                                                                                 },
+                                                                          "node_id":  {
+                                                                                          "type":  "string",
+                                                                                          "format":  "uuid"
+                                                                                      },
+                                                                          "tag":  {
+                                                                                      "type":  "string"
+                                                                                  },
+                                                                          "kind":  {
+                                                                                       "type":  "string"
+                                                                                   },
+                                                                          "listen_port":  {
+                                                                                              "type":  "integer"
+                                                                                          },
+                                                                          "core":  {
+                                                                                       "type":  "string",
+                                                                                       "enum":  [
+                                                                                                    "singbox",
+                                                                                                    "xray"
+                                                                                                ]
+                                                                                   },
+                                                                          "enabled":  {
+                                                                                          "type":  "boolean"
+                                                                                      },
+                                                                          "reachable":  {
+                                                                                            "type":  "boolean",
+                                                                                            "nullable":  true
+                                                                                        }
+                                                                      },
+                                                       "additionalProperties":  true
+                                                   },
+                                       "NewInbound":  {
+                                                          "type":  "object",
+                                                          "required":  [
+                                                                           "node_id",
+                                                                           "tag",
+                                                                           "kind",
+                                                                           "listen_port",
+                                                                           "core"
+                                                                       ],
+                                                          "properties":  {
+                                                                             "node_id":  {
+                                                                                             "type":  "string",
+                                                                                             "format":  "uuid"
+                                                                                         },
+                                                                             "tag":  {
+                                                                                         "type":  "string"
+                                                                                     },
+                                                                             "kind":  {
+                                                                                          "type":  "string"
+                                                                                      },
+                                                                             "listen_port":  {
+                                                                                                 "type":  "integer",
+                                                                                                 "minimum":  1,
+                                                                                                 "maximum":  65535
+                                                                                             },
+                                                                             "core":  {
+                                                                                          "type":  "string",
+                                                                                          "enum":  [
+                                                                                                       "singbox",
+                                                                                                       "xray"
+                                                                                                   ]
+                                                                                      },
+                                                                             "enabled":  {
+                                                                                             "type":  "boolean",
+                                                                                             "default":  true
+                                                                                         }
+                                                                         },
+                                                          "additionalProperties":  true
+                                                      },
+                                       "User":  {
+                                                    "type":  "object",
+                                                    "required":  [
+                                                                     "id",
+                                                                     "username",
+                                                                     "enabled",
+                                                                     "created_at"
+                                                                 ],
+                                                    "properties":  {
+                                                                       "id":  {
+                                                                                  "type":  "string",
+                                                                                  "format":  "uuid"
+                                                                              },
+                                                                       "username":  {
+                                                                                        "type":  "string"
+                                                                                    },
+                                                                       "enabled":  {
+                                                                                       "type":  "boolean"
+                                                                                   },
+                                                                       "traffic_limit_bytes":  {
+                                                                                                   "type":  "integer",
+                                                                                                   "format":  "int64"
+                                                                                               },
+                                                                       "used_traffic_bytes":  {
+                                                                                                  "type":  "integer",
+                                                                                                  "format":  "int64"
+                                                                                              },
+                                                                       "expires_at":  {
+                                                                                          "type":  "string",
+                                                                                          "format":  "date-time",
+                                                                                          "nullable":  true
+                                                                                      },
+                                                                       "created_at":  {
+                                                                                          "type":  "string",
+                                                                                          "format":  "date-time"
+                                                                                      }
+                                                                   },
+                                                    "additionalProperties":  true
+                                                },
+                                       "NewUser":  {
+                                                       "type":  "object",
+                                                       "required":  [
+                                                                        "username"
+                                                                    ],
+                                                       "properties":  {
+                                                                          "username":  {
+                                                                                           "type":  "string"
+                                                                                       },
+                                                                          "password":  {
+                                                                                           "type":  "string",
+                                                                                           "writeOnly":  true
+                                                                                       },
+                                                                          "traffic_limit_bytes":  {
+                                                                                                      "type":  "integer",
+                                                                                                      "format":  "int64",
+                                                                                                      "default":  0
+                                                                                                  },
+                                                                          "expires_at":  {
+                                                                                             "type":  "string",
+                                                                                             "format":  "date-time",
+                                                                                             "nullable":  true
+                                                                                         }
+                                                                      },
+                                                       "additionalProperties":  true
+                                                   },
+                                       "Group":  {
+                                                     "type":  "object",
+                                                     "required":  [
+                                                                      "id",
+                                                                      "name"
+                                                                  ],
+                                                     "properties":  {
+                                                                        "id":  {
+                                                                                   "type":  "string",
+                                                                                   "format":  "uuid"
+                                                                               },
+                                                                        "name":  {
+                                                                                     "type":  "string"
+                                                                                 }
+                                                                    },
+                                                     "additionalProperties":  true
+                                                 },
+                                       "Domain":  {
+                                                      "type":  "object",
+                                                      "required":  [
+                                                                       "id",
+                                                                       "hostname"
+                                                                   ],
+                                                      "properties":  {
+                                                                         "id":  {
+                                                                                    "type":  "string",
+                                                                                    "format":  "uuid"
+                                                                                },
+                                                                         "hostname":  {
+                                                                                          "type":  "string"
+                                                                                      },
+                                                                         "verified_at":  {
+                                                                                             "type":  "string",
+                                                                                             "format":  "date-time",
+                                                                                             "nullable":  true
+                                                                                         },
+                                                                         "reachable":  {
+                                                                                           "type":  "boolean",
+                                                                                           "nullable":  true
+                                                                                       },
+                                                                         "cert_not_after":  {
+                                                                                                "type":  "string",
+                                                                                                "format":  "date-time",
+                                                                                                "nullable":  true
+                                                                                            }
+                                                                     },
+                                                      "additionalProperties":  true
+                                                  },
+                                       "DomainInput":  {
+                                                           "type":  "object",
+                                                           "required":  [
+                                                                            "hostname"
+                                                                        ],
+                                                           "properties":  {
+                                                                              "hostname":  {
+                                                                                               "type":  "string"
+                                                                                           },
+                                                                              "node_id":  {
+                                                                                              "type":  "string",
+                                                                                              "format":  "uuid",
+                                                                                              "nullable":  true
+                                                                                          },
+                                                                              "proxied":  {
+                                                                                              "type":  "boolean",
+                                                                                              "default":  false
+                                                                                          }
+                                                                          },
+                                                           "additionalProperties":  true
+                                                       },
+                                       "RoutingProfile":  {
+                                                              "type":  "object",
+                                                              "required":  [
+                                                                               "id",
+                                                                               "name",
+                                                                               "version"
+                                                                           ],
+                                                              "properties":  {
+                                                                                 "id":  {
+                                                                                            "type":  "string",
+                                                                                            "format":  "uuid"
+                                                                                        },
+                                                                                 "name":  {
+                                                                                              "type":  "string"
+                                                                                          },
+                                                                                 "version":  {
+                                                                                                 "type":  "integer"
+                                                                                             },
+                                                                                 "is_default":  {
+                                                                                                    "type":  "boolean"
+                                                                                                }
+                                                                             },
+                                                              "additionalProperties":  true
+                                                          },
+                                       "RoutingProfileInput":  {
+                                                                   "type":  "object",
+                                                                   "required":  [
+                                                                                    "name"
+                                                                                ],
+                                                                   "properties":  {
+                                                                                      "name":  {
+                                                                                                   "type":  "string"
+                                                                                               },
+                                                                                      "is_default":  {
+                                                                                                         "type":  "boolean"
+                                                                                                     },
+                                                                                      "rules":  {
+                                                                                                    "type":  "object",
+                                                                                                    "additionalProperties":  true
+                                                                                                }
+                                                                                  },
+                                                                   "additionalProperties":  true
+                                                               },
+                                       "LogRecord":  {
+                                                         "type":  "object",
+                                                         "required":  [
+                                                                          "ts",
+                                                                          "level",
+                                                                          "target",
+                                                                          "message",
+                                                                          "fields"
+                                                                      ],
+                                                         "properties":  {
+                                                                            "ts":  {
+                                                                                       "type":  "string",
+                                                                                       "format":  "date-time"
+                                                                                   },
+                                                                            "level":  {
+                                                                                          "type":  "string"
+                                                                                      },
+                                                                            "code":  {
+                                                                                         "type":  "string",
+                                                                                         "nullable":  true
+                                                                                     },
+                                                                            "target":  {
+                                                                                           "type":  "string"
+                                                                                       },
+                                                                            "message":  {
+                                                                                            "type":  "string"
+                                                                                        },
+                                                                            "fields":  {
+                                                                                           "type":  "string"
+                                                                                       }
+                                                                        }
+                                                     },
+                                       "Error":  {
+                                                     "type":  "object",
+                                                     "required":  [
+                                                                      "error"
+                                                                  ],
+                                                     "properties":  {
+                                                                        "error":  {
+                                                                                      "type":  "string"
+                                                                                  },
+                                                                        "code":  {
+                                                                                     "type":  "string",
+                                                                                     "description":  "Stable honey diagnostic code."
+                                                                                 }
+                                                                    }
+                                                 },
+                                       "TrafficSeriesPoint":  {
+                                                                  "type":  "object",
+                                                                  "properties":  {
+                                                                                     "bucket":  {
+                                                                                                    "type":  "string",
+                                                                                                    "format":  "date-time"
+                                                                                                },
+                                                                                     "up_bytes":  {
+                                                                                                      "type":  "integer",
+                                                                                                      "format":  "int64"
+                                                                                                  },
+                                                                                     "down_bytes":  {
+                                                                                                        "type":  "integer",
+                                                                                                        "format":  "int64"
+                                                                                                    }
+                                                                                 }
+                                                              },
+                                       "TrafficRank":  {
+                                                           "type":  "object",
+                                                           "properties":  {
+                                                                              "id":  {
+                                                                                         "type":  "string",
+                                                                                         "format":  "uuid"
+                                                                                     },
+                                                                              "name":  {
+                                                                                           "type":  "string"
+                                                                                       },
+                                                                              "up_bytes":  {
+                                                                                               "type":  "integer",
+                                                                                               "format":  "int64"
+                                                                                           },
+                                                                              "down_bytes":  {
+                                                                                                 "type":  "integer",
+                                                                                                 "format":  "int64"
+                                                                                             }
+                                                                          }
+                                                       },
+                                       "TrafficCoreBreakdown":  {
+                                                                    "type":  "object",
+                                                                    "properties":  {
+                                                                                       "core":  {
+                                                                                                    "type":  "string"
+                                                                                                },
+                                                                                       "up_bytes":  {
+                                                                                                        "type":  "integer",
+                                                                                                        "format":  "int64"
+                                                                                                    },
+                                                                                       "down_bytes":  {
+                                                                                                          "type":  "integer",
+                                                                                                          "format":  "int64"
+                                                                                                      }
+                                                                                   }
+                                                                },
+                                       "FleetHealthSummary":  {
+                                                                  "type":  "object",
+                                                                  "properties":  {
+                                                                                     "nodes_total":  {
+                                                                                                         "type":  "integer",
+                                                                                                         "format":  "int64"
+                                                                                                     },
+                                                                                     "nodes_online":  {
+                                                                                                          "type":  "integer",
+                                                                                                          "format":  "int64"
+                                                                                                      },
+                                                                                     "failed_pushes":  {
+                                                                                                           "type":  "integer",
+                                                                                                           "format":  "int64"
+                                                                                                       },
+                                                                                     "unreachable_endpoints":  {
+                                                                                                                   "type":  "integer",
+                                                                                                                   "format":  "int64"
+                                                                                                               }
+                                                                                 }
+                                                              },
+                                       "TrafficSummary":  {
+                                                              "type":  "object",
+                                                              "properties":  {
+                                                                                 "up_bytes":  {
+                                                                                                  "type":  "integer",
+                                                                                                  "format":  "int64"
+                                                                                              },
+                                                                                 "down_bytes":  {
+                                                                                                    "type":  "integer",
+                                                                                                    "format":  "int64"
+                                                                                                },
+                                                                                 "total_bytes":  {
+                                                                                                     "type":  "integer",
+                                                                                                     "format":  "int64"
+                                                                                                 },
+                                                                                 "previous_total_bytes":  {
+                                                                                                              "type":  "integer",
+                                                                                                              "format":  "int64"
+                                                                                                          },
+                                                                                 "change_percent":  {
+                                                                                                        "type":  "number",
+                                                                                                        "format":  "double",
+                                                                                                        "nullable":  true
+                                                                                                    }
+                                                                             }
+                                                          },
+                                       "TrafficAnalytics":  {
+                                                                "type":  "object",
+                                                                "properties":  {
+                                                                                   "scope":  {
+                                                                                                 "type":  "string",
+                                                                                                 "enum":  [
+                                                                                                              "fleet",
+                                                                                                              "reseller"
+                                                                                                          ]
+                                                                                             },
+                                                                                   "from":  {
+                                                                                                "type":  "string",
+                                                                                                "format":  "date-time"
+                                                                                            },
+                                                                                   "to":  {
+                                                                                              "type":  "string",
+                                                                                              "format":  "date-time"
+                                                                                          },
+                                                                                   "bucket":  {
+                                                                                                  "type":  "string",
+                                                                                                  "enum":  [
+                                                                                                               "hour",
+                                                                                                               "day"
+                                                                                                           ]
+                                                                                              },
+                                                                                   "retention_days":  {
+                                                                                                          "type":  "integer"
+                                                                                                      },
+                                                                                   "summary":  {
+                                                                                                   "$ref":  "#/components/schemas/TrafficSummary"
+                                                                                               },
+                                                                                   "series":  {
+                                                                                                  "type":  "array",
+                                                                                                  "items":  {
+                                                                                                                "$ref":  "#/components/schemas/TrafficSeriesPoint"
+                                                                                                            }
+                                                                                              },
+                                                                                   "top_users":  {
+                                                                                                     "type":  "array",
+                                                                                                     "items":  {
+                                                                                                                   "$ref":  "#/components/schemas/TrafficRank"
+                                                                                                               }
+                                                                                                 },
+                                                                                   "top_nodes":  {
+                                                                                                     "type":  "array",
+                                                                                                     "items":  {
+                                                                                                                   "$ref":  "#/components/schemas/TrafficRank"
+                                                                                                               }
+                                                                                                 },
+                                                                                   "cores":  {
+                                                                                                 "type":  "array",
+                                                                                                 "items":  {
+                                                                                                               "$ref":  "#/components/schemas/TrafficCoreBreakdown"
+                                                                                                           }
+                                                                                             },
+                                                                                   "health":  {
+                                                                                                  "allOf":  [
+                                                                                                                {
+                                                                                                                    "$ref":  "#/components/schemas/FleetHealthSummary"
+                                                                                                                }
+                                                                                                            ],
+                                                                                                  "nullable":  true
+                                                                                              }
+                                                                               }
+                                                            }
+                                   },
+                       "responses":  {
+                                         "BadRequest":  {
+                                                            "description":  "Invalid request",
+                                                            "content":  {
+                                                                            "application/json":  {
+                                                                                                     "schema":  {
+                                                                                                                    "$ref":  "#/components/schemas/Error"
+                                                                                                                }
+                                                                                                 }
+                                                                        }
+                                                        },
+                                         "Unauthorized":  {
+                                                              "description":  "Bearer key or panel session required",
+                                                              "content":  {
+                                                                              "application/json":  {
+                                                                                                       "schema":  {
+                                                                                                                      "$ref":  "#/components/schemas/Error"
+                                                                                                                  }
+                                                                                                   }
+                                                                          }
+                                                          },
+                                         "Forbidden":  {
+                                                           "description":  "Identity scope is insufficient",
+                                                           "content":  {
+                                                                           "application/json":  {
+                                                                                                    "schema":  {
+                                                                                                                   "$ref":  "#/components/schemas/Error"
+                                                                                                               }
+                                                                                                }
+                                                                       }
+                                                       },
+                                         "NotFound":  {
+                                                          "description":  "Resource not found or outside caller scope",
+                                                          "content":  {
+                                                                          "application/json":  {
+                                                                                                   "schema":  {
+                                                                                                                  "$ref":  "#/components/schemas/Error"
+                                                                                                              }
+                                                                                               }
+                                                                      }
+                                                      },
+                                         "Upstream":  {
+                                                          "description":  "Agent or managed core rejected the operation",
+                                                          "content":  {
+                                                                          "application/json":  {
+                                                                                                   "schema":  {
+                                                                                                                  "$ref":  "#/components/schemas/Error"
+                                                                                                              }
+                                                                                               }
+                                                                      }
+                                                      }
+                                     }
+                   }
+}

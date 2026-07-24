@@ -1,0 +1,55 @@
+# rust
+/master/target/
+/master/.env
+
+# go
+/agent/honey-agent
+/agent/bin/
+
+# secrets / pki
+/certs/
+*.key
+*.crt
+*.srl
+*.pem
+*.p12
+*.pfx
+.env
+.env.*
+*.env
+!*.env.example
+!.env.example
+credentials.env
+.smoke-*
+
+# runtime state and release output
+*.db
+*.sqlite
+*.sqlite3
+/backups/
+/build/
+/dist/
+/coverage/
+/.codex/
+/.agents/
+
+# private planning notes
+/docs/roadmap-big.md
+/docs/product-roadmap.md
+
+# local assistant instruction artifacts
+AGENTS.md
+CLAUDE.md
+GEMINI.md
+.cursorrules
+assistant-instructions.md
+llm-instructions.md
+agent-instructions.md
+ai-instructions.md
+copilot-instructions.md
+.github/copilot-instructions.md
+
+# misc
+.DS_Store
+*.log
+*.tmp

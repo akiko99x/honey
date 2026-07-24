@@ -1,0 +1,56 @@
+{
+  "__inputs": [
+    { "name": "DS_PROMETHEUS", "label": "Prometheus", "type": "datasource", "pluginId": "prometheus" }
+  ],
+  "title": "honey",
+  "uid": "honey-overview",
+  "schemaVersion": 39,
+  "version": 1,
+  "editable": true,
+  "time": { "from": "now-6h", "to": "now" },
+  "refresh": "30s",
+  "templating": { "list": [] },
+  "annotations": { "list": [] },
+  "panels": [
+    {
+      "id": 1, "type": "stat", "title": "Nodes online",
+      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 0 },
+      "fieldConfig": { "defaults": { "thresholds": { "mode": "absolute", "steps": [ { "color": "red", "value": null }, { "color": "green", "value": 1 } ] } } },
+      "targets": [ { "expr": "honey_nodes_online", "legendFormat": "online", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" } } ]
+    },
+    {
+      "id": 2, "type": "stat", "title": "Nodes total",
+      "gridPos": { "h": 4, "w": 6, "x": 6, "y": 0 },
+      "targets": [ { "expr": "honey_nodes_total", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" } } ]
+    },
+    {
+      "id": 3, "type": "stat", "title": "Active users",
+      "gridPos": { "h": 4, "w": 6, "x": 12, "y": 0 },
+      "targets": [ { "expr": "honey_users_active", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" } } ]
+    },
+    {
+      "id": 4, "type": "stat", "title": "Inbounds",
+      "gridPos": { "h": 4, "w": 6, "x": 18, "y": 0 },
+      "targets": [ { "expr": "honey_inbounds_total", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" } } ]
+    },
+    {
+      "id": 5, "type": "timeseries", "title": "Users (total vs active)",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 4 },
+      "targets": [
+        { "expr": "honey_users_total", "legendFormat": "total", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" } },
+        { "expr": "honey_users_active", "legendFormat": "active", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" } }
+      ]
+    },
+    {
+      "id": 6, "type": "timeseries", "title": "Traffic rate",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 4 },
+      "fieldConfig": { "defaults": { "unit": "Bps" } },
+      "targets": [ { "expr": "rate(honey_traffic_bytes_total[5m])", "legendFormat": "bytes/s", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" } } ]
+    },
+    {
+      "id": 7, "type": "timeseries", "title": "Health issues by severity",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 12 },
+      "targets": [ { "expr": "honey_issues", "legendFormat": "{{severity}}", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" } } ]
+    }
+  ]
+}
