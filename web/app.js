@@ -677,7 +677,9 @@
       }
     } else {
       const activeView = categoryView(state.route, state.categorySection);
-      view.innerHTML = (pages[activeView] || renderOverview)();
+      view.innerHTML = (pages[activeView] || renderOverview)()
+        .replace("ACME automation (sing-box)", "ACME automation")
+        .replace("xray inbounds still use manual paths.", "Xray can use Honey-managed HTTP-01 certificates.");
       if (activeView === "logs" || activeView === "issue-history") loadLogs();
       if (activeView === "traffic-geography" && !state.geo.data && !state.geo.loading) loadGeo();
     }
@@ -2267,8 +2269,8 @@
     const rows = acme.map((inbound) => `<tr><td class="primary-cell"><button class="cell-link" data-open="inbounds/${inbound.id}">${esc(inbound.tag)}</button></td>
       <td class="mono">${esc(inbound.server_name || "—")}</td><td>${esc(inbound.core)}</td><td class="mono">HTTP-01 · :80</td>
       <td><span class="status ${inbound.enabled ? "ok" : "warn"}">${inbound.enabled ? "managed" : "disabled"}</span></td></tr>`).join("");
-    return `<div class="page">${pageHeader("ACME", "Automatic sing-box certificate issuance and renewal.")}
-      <div class="panel" style="margin-bottom:16px"><div class="panel-body"><p class="form-note">HTTP-01 requires the hostname to resolve to this node and TCP port 80 to reach sing-box during validation.</p></div></div>
+    return `<div class="page">${pageHeader("ACME", "Automatic certificate issuance and renewal for sing-box and Honey-managed Xray.")}
+      <div class="panel" style="margin-bottom:16px"><div class="panel-body"><p class="form-note">HTTP-01 requires the hostname to resolve to this node and public TCP port 80 to reach Caddy, which forwards the challenge to the local ACME gateway on :9080.</p></div></div>
       ${tableShell(`<b>${acme.length}</b> ACME-managed inbound${acme.length === 1 ? "" : "s"}.`, ["Inbound", "Hostname", "Core", "Challenge", "State"], rows, "No inbounds currently use automatic ACME.")}</div>`;
   }
 
@@ -2528,15 +2530,13 @@
 
   function wizSecurityFields(w) {
     if (w.security === "tls") {
-      const src = w.core === "xray" ? "manual" : (w.cert_source || "acme");
-      const srcSeg = w.core === "xray"
-        ? `<span class="chip">manual paths (xray)</span>`
-        : `<div class="seg" style="margin-top:2px">${["acme", "manual"].map((s) => `<button type="button" class="seg-btn ${src === s ? "on" : ""}" data-wiz-set="cert_source" data-val="${s}">${s === "acme" ? "automatic (ACME)" : "manual paths"}</button>`).join("")}</div>`;
+      const src = w.cert_source || "acme";
+      const srcSeg = `<div class="seg" style="margin-top:2px">${["acme", "manual"].map((s) => `<button type="button" class="seg-btn ${src === s ? "on" : ""}" data-wiz-set="cert_source" data-val="${s}">${s === "acme" ? "automatic (ACME)" : "manual paths"}</button>`).join("")}</div>`;
       const body = src === "acme"
-        ? `<div class="form-row"><label><span>ACME email</span><input data-wiz="acme_email" value="${esc(w.acme_email)}" placeholder="you@example.com"></label><label><span>Challenge</span><select data-wiz="acme_challenge" data-struct>${option("http", "HTTP-01", w.acme_challenge || "http")}${option("tls-alpn", "TLS-ALPN-01", w.acme_challenge || "http")}</select></label></div>
+        ? `<div class="form-row"><label><span>ACME email</span><input data-wiz="acme_email" value="${esc(w.acme_email)}" placeholder="you@example.com"></label><label><span>Challenge</span><select data-wiz="acme_challenge" data-struct>${option("http", "HTTP-01", w.acme_challenge || "http")}${w.core === "xray" ? "" : option("tls-alpn", "TLS-ALPN-01", w.acme_challenge || "http")}</select></label></div>
           ${(w.acme_challenge || "http") === "http"
-            ? `<label>${helpLabel("Alternate local HTTP port (optional)", "Normally Let's Encrypt connects to public TCP :80 and sing-box listens there directly. Set a high local port only when a reverse proxy forwards /.well-known/acme-challenge/ from public :80 to this port.")}<input data-wiz="acme_http_port" type="number" min="1" max="65535" value="${esc(w.acme_http_port)}" placeholder="empty = :80"></label><p class="form-note">HTTP-01 needs public TCP :80 to reach this node. If Caddy already owns :80, configure challenge forwarding and set its local target port here.</p>`
-            : `<p class="form-note">TLS-ALPN-01 needs public TCP :443 to reach sing-box. Use it only when Caddy or another inbound does not already own that port.</p>`}`
+            ? `<label>${helpLabel("Local HTTP-01 port", "Honey forwards public /.well-known/acme-challenge/ requests from Caddy to its ACME gateway. Xray uses the fixed local gateway port :9080.")}<input data-wiz="acme_http_port" type="number" min="1" max="65535" value="${esc(w.core === "xray" ? "9080" : w.acme_http_port)}" ${w.core === "xray" ? "readonly" : ""}></label><p class="form-note">${w.core === "xray" ? "Honey manages the ACME client and certificate files for Xray; HTTP-01 is the supported challenge." : "HTTP-01 needs public TCP :80 to reach this node."}</p>`
+            : `<p class="form-note">TLS-ALPN-01 is available only for sing-box. Xray uses Honey-managed HTTP-01.</p>`}`
         : `<div class="form-row"><label><span>Certificate path</span><input data-wiz="cert_path" value="${esc(w.cert_path)}" placeholder="/etc/letsencrypt/live/…/fullchain.pem"></label><label><span>Key path</span><input data-wiz="key_path" value="${esc(w.key_path)}" placeholder="/…/privkey.pem"></label></div>`;
       return `<div class="form-row"><label>${helpLabel("Server name (SNI / domain)", "The TLS name sent by clients. It must be covered by the configured certificate and resolve through the public path you intend clients to use.")}<input data-wiz="server_name" list="wiz-domains" value="${esc(w.server_name)}" placeholder="vpn.example.com"></label><label><span>Certificate source</span>${srcSeg}</label></div>
         ${body}`;
@@ -2560,7 +2560,7 @@
     if (!state.wiz) state.wiz = wizDefaults();
     const w = state.wiz;
     w.core = net === "xhttp" ? "xray" : "singbox"; w.kind = "vless"; w.flow = "";
-    w.security = "tls"; w.cert_source = net === "xhttp" ? "manual" : "acme";
+    w.security = "tls"; w.cert_source = "acme";
     w.network = net; w.transport_path = net === "xhttp" ? "/" : "/ws";
     if (!w.port) w.port = "443";
     wizNormalize(w);
@@ -2590,7 +2590,8 @@
     if (err) err.textContent = "";
     const tls_enabled = w.security === "tls" || w.security === "reality";
     const reality = w.security === "reality";
-    const acme = w.core === "singbox" && w.security === "tls" && (w.cert_source || "acme") === "acme";
+    const acme = w.security === "tls" && (w.cert_source || "acme") === "acme";
+    const acmeChallenge = w.core === "xray" ? "http" : (w.acme_challenge || "http");
     const showT = wizSupportsTransport(w.kind);
     const body = {
       node_id: w.node_id,
@@ -2618,9 +2619,10 @@
         const ex = w.editing_id && w._orig && w._orig.extra ? { ...w._orig.extra } : {};
         if (acme) {
           ex.acme = { email: (w.acme_email || "").trim() };
-          if ((w.acme_challenge || "http") === "http") {
+          if (acmeChallenge === "http") {
             ex.acme.disable_tls_alpn_challenge = true;
-            if (Number(w.acme_http_port || 0) > 0) ex.acme.alternative_http_port = Number(w.acme_http_port);
+            if (w.core === "xray") ex.acme.alternative_http_port = 9080;
+            else if (Number(w.acme_http_port || 0) > 0) ex.acme.alternative_http_port = Number(w.acme_http_port);
           } else {
             ex.acme.disable_http_challenge = true;
           }

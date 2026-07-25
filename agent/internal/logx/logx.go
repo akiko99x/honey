@@ -26,6 +26,8 @@ const (
 	AgentResumeFailed    = "A0108"
 	AgentResumeEmpty     = "A0109"
 	AgentResumeStat      = "A0110"
+	AgentACMEGateway     = "A0111"
+	AgentACMERenew       = "A0112"
 	AgentDialRetry       = "A0201"
 	AgentDialUp          = "A0202"
 	AgentListenFailed    = "A0203"

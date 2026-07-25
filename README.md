@@ -180,8 +180,11 @@ not a honey defect.
   The bootstrap Caddyfile forwards HTTP-01 from public `:80` to the writable
   local challenge listener on `:9080`; direct-node installs can leave the
   alternate port empty and expose `:80` themselves. ACME state is persisted
-  below `/etc/honey/sing-box/acme`. Xray TLS inbounds use provisioned
-  `cert_path`/`key_path` files.
+  below `/etc/honey/sing-box/acme`. Xray TLS inbounds can use Honey-managed
+  HTTP-01 ACME certificates below `/etc/honey/xray/acme`, or provisioned
+  `cert_path`/`key_path` files. The agent's Xray ACME gateway listens on
+  `127.0.0.1:9080`; Caddy forwards public `/.well-known/acme-challenge/`
+  requests there.
 - **REALITY `dest`/SNI** remain free text. A compatible public donor is the
   conventional choice, but filtering can be route-specific. A domain you own
   that resolves to the node and terminates a compatible TLS 1.3 target is also

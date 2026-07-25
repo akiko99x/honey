@@ -5,6 +5,20 @@ version tags and is currently pre-stable.
 
 ## [Unreleased]
 
+## [0.0.5] - 2026-07-26
+
+### Added
+
+- Honey-managed Xray ACME certificates with persistent cache, HTTP-01
+  challenge handling, atomic PEM export and automatic renewal/reload.
+- Xray ACME support in the inbound wizard; it uses the local challenge gateway
+  on `127.0.0.1:9080` and keeps manual certificate paths available.
+
+### Changed
+
+- Xray ACME metadata is translated by the agent and never passed through to
+  Xray's inbound schema.
+
 ## [0.0.4] - 2026-07-26
 
 ### Added
@@ -16,8 +30,7 @@ version tags and is currently pre-stable.
 
 ### Changed
 
-- Xray TLS remains explicit-cert/REALITY only; the panel now explains that
-  automatic ACME is sing-box-only because Xray has no native ACME manager.
+- Xray TLS supports manual certificate paths, REALITY, or Honey-managed ACME.
 
 ### Fixed
 
@@ -70,7 +83,8 @@ version tags and is currently pre-stable.
 - GitHub Actions for tests, database recovery, secret scanning and release
   packaging.
 
-[Unreleased]: https://github.com/akiko99x/honey/compare/v0.0.4...HEAD
+[Unreleased]: https://github.com/akiko99x/honey/compare/v0.0.5...HEAD
+[0.0.5]: https://github.com/akiko99x/honey/compare/v0.0.4...v0.0.5
 [0.0.4]: https://github.com/akiko99x/honey/compare/v0.0.3...v0.0.4
 [0.0.3]: https://github.com/akiko99x/honey/compare/v0.0.2...v0.0.3
 [0.0.2]: https://github.com/akiko99x/honey/compare/v0.0.1...v0.0.2

@@ -77,6 +77,31 @@ func TestBuildRealityVLESSUsesCurrentXraySchema(t *testing.T) {
 	}
 }
 
+func TestBuildXrayACMEMetadataDoesNotLeakIntoInbound(t *testing.T) {
+	spec := core.Spec{Inbounds: []core.Inbound{{
+		Core: "xray", Tag: "xray-tls", Type: "vless", Port: 443,
+		Users: []core.User{{Name: "alice", UUID: "11111111-1111-1111-1111-111111111111"}},
+		TLS: &core.TLS{
+			Enabled: true, ServerName: "vpn.example.com",
+			CertPath: "/etc/honey/xray/acme/vpn.example.com/fullchain.pem",
+			KeyPath:  "/etc/honey/xray/acme/vpn.example.com/privkey.pem",
+		},
+		ExtraJSON: json.RawMessage(`{"acme":{"email":"ops@example.com"}}`),
+	}}}
+	data, err := BuildConfig(spec, "127.0.0.1:8081")
+	if err != nil {
+		t.Fatal(err)
+	}
+	inbound := decodeConfig(t, data)["inbounds"].([]any)[0].(map[string]any)
+	if _, exists := inbound["acme"]; exists {
+		t.Fatal("Honey ACME metadata must not be passed to Xray")
+	}
+	tls := inbound["streamSettings"].(map[string]any)["tlsSettings"].(map[string]any)
+	if tls["certificates"] == nil {
+		t.Fatal("expected injected Xray certificate paths")
+	}
+}
+
 func TestBuildHysteria2UsesXrayHysteriaProtocolAndTransport(t *testing.T) {
 	spec := core.Spec{Inbounds: []core.Inbound{{
 		Tag: "hy2-in", Type: "hysteria2", Port: 18443,

@@ -25,9 +25,10 @@ import (
 	"github.com/akiko99x/honey/agent/internal/svc"
 	"github.com/akiko99x/honey/agent/internal/sysmetrics"
 	"github.com/akiko99x/honey/agent/internal/wg"
+	"github.com/akiko99x/honey/agent/internal/xrayacme"
 )
 
-const agentVersion = "0.0.4"
+const agentVersion = "0.0.5"
 
 // Server implements honeyv1.AgentServiceServer.
 type Server struct {
@@ -38,6 +39,7 @@ type Server struct {
 	statsEpoch string
 	cores      map[string]core.Manager // "singbox", "xray"
 	configPath map[string]string
+	acme       *xrayacme.Manager
 
 	quotaMu       sync.Mutex
 	quotaBytes    map[string]uint64 // per-user remaining quota from the last push
@@ -70,6 +72,11 @@ func (s *Server) SetStatsEpoch(epoch string) {
 	if epoch != "" {
 		s.statsEpoch = epoch
 	}
+}
+
+// SetACMEManager enables Honey-managed HTTP-01 certificates for Xray.
+func (s *Server) SetACMEManager(manager *xrayacme.Manager) {
+	s.acme = manager
 }
 
 // Accounting exposes the sing-box accounting core to the agent's background
@@ -187,7 +194,7 @@ func (s *Server) Ping(_ context.Context, req *honeyv1.PingRequest) (*honeyv1.Pin
 
 // Apply — node-level: group inbounds by core, (re)build each core's config, and
 // stop any core left with no inbounds. this is what the master reconcile calls.
-func (s *Server) Apply(_ context.Context, req *honeyv1.ApplyRequest) (*honeyv1.CoreStatus, error) {
+func (s *Server) Apply(ctx context.Context, req *honeyv1.ApplyRequest) (*honeyv1.CoreStatus, error) {
 	spec := specFromProto(req.GetSpec())
 	logx.Info(logx.AgentApplyRecv, "apply came in: %d inbound(s)", len(spec.Inbounds))
 	s.syncPortHopping(spec.Inbounds)
@@ -208,9 +215,25 @@ func (s *Server) Apply(_ context.Context, req *honeyv1.ApplyRequest) (*honeyv1.C
 		}
 	}
 
+	cleanup, err := s.prepareACME(ctx, &spec, false)
+	if err != nil {
+		return s.aggregateStatus(fmt.Errorf("prepare ACME candidate: %w", err)), nil
+	}
 	configs, kinds, err := s.validateCandidate(spec)
+	cleanup()
 	if err != nil {
 		return s.aggregateStatus(err), nil
+	}
+	if s.acme != nil {
+		cleanup, err = s.prepareACME(ctx, &spec, true)
+		if err != nil {
+			return s.aggregateStatus(fmt.Errorf("activate ACME certificate: %w", err)), nil
+		}
+		defer cleanup()
+		configs, kinds, err = s.validateCandidate(spec)
+		if err != nil {
+			return s.aggregateStatus(err), nil
+		}
 	}
 
 	// Stop obsolete cores only after every replacement passed validation.
@@ -281,10 +304,16 @@ func (s *Server) Apply(_ context.Context, req *honeyv1.ApplyRequest) (*honeyv1.C
 
 // Validate performs the complete build/check phase without touching firewall,
 // marker files, live configs, or core processes.
-func (s *Server) Validate(_ context.Context, req *honeyv1.ApplyRequest) (*honeyv1.CoreStatus, error) {
+func (s *Server) Validate(ctx context.Context, req *honeyv1.ApplyRequest) (*honeyv1.CoreStatus, error) {
 	spec := specFromProto(req.GetSpec())
 	logx.Info(logx.AgentApplyRecv, "dry-run came in: %d inbound(s)", len(spec.Inbounds))
-	_, _, err := s.validateCandidate(spec)
+	cleanup, err := s.prepareACME(ctx, &spec, false)
+	if err != nil {
+		logx.Warn(logx.CoreConfigBuildFailed, "ACME candidate rejected: %v", err)
+		return errStatus(honeyv1.CoreKind_CORE_KIND_UNSPECIFIED, fmt.Errorf("candidate configuration rejected; inspect agent logs")), nil
+	}
+	defer cleanup()
+	_, _, err = s.validateCandidate(spec)
 	if err != nil {
 		logx.Warn(logx.CoreConfigBuildFailed, "candidate rejected: %v", err)
 		return errStatus(honeyv1.CoreKind_CORE_KIND_UNSPECIFIED, fmt.Errorf("candidate configuration rejected; inspect agent logs")), nil
@@ -334,7 +363,7 @@ func (s *Server) validateCandidate(spec core.Spec) (map[string]string, []string,
 }
 
 // Start — bring one core up from the spec's inbounds for that core.
-func (s *Server) Start(_ context.Context, req *honeyv1.StartRequest) (*honeyv1.CoreStatus, error) {
+func (s *Server) Start(ctx context.Context, req *honeyv1.StartRequest) (*honeyv1.CoreStatus, error) {
 	kind := coreKey(req.GetCore())
 	logx.Info(logx.AgentStartRecv, "master says start %s", kind)
 	mgr, ok := s.cores[kind]
@@ -345,6 +374,15 @@ func (s *Server) Start(_ context.Context, req *honeyv1.StartRequest) (*honeyv1.C
 	spec := specFromProto(req.GetSpec())
 	spec.Inbounds = filterCore(spec.Inbounds, kind)
 
+	cleanup := func() {}
+	var err error
+	if kind == "xray" {
+		cleanup, err = s.prepareACME(ctx, &spec, true)
+	}
+	if err != nil {
+		return coreStatus(req.GetCore(), mgr, err), nil
+	}
+	defer cleanup()
 	cfg, err := mgr.BuildConfig(spec)
 	if err == nil {
 		err = mgr.Start(cfg)
@@ -513,6 +551,11 @@ func (s *Server) Benchmark(_ context.Context, req *honeyv1.BenchmarkRequest) (*h
 // to be running (have inbounds in the spec) are checked.
 func (s *Server) ConfigDrift(_ context.Context, req *honeyv1.ConfigDriftRequest) (*honeyv1.ConfigDriftReply, error) {
 	spec := specFromProto(req.GetSpec())
+	if s.acme != nil {
+		if err := s.acme.InjectPaths(&spec); err != nil {
+			return nil, err
+		}
+	}
 	byCore := map[string][]core.Inbound{}
 	for _, ib := range spec.Inbounds {
 		byCore[coreOf(ib.Core)] = append(byCore[coreOf(ib.Core)], ib)
@@ -552,6 +595,13 @@ func (s *Server) ConfigDrift(_ context.Context, req *honeyv1.ConfigDriftRequest)
 		})
 	}
 	return reply, nil
+}
+
+func (s *Server) prepareACME(ctx context.Context, spec *core.Spec, issue bool) (func(), error) {
+	if s.acme == nil {
+		return func() {}, nil
+	}
+	return s.acme.Prepare(ctx, spec, issue)
 }
 
 // canonicalHash hashes a JSON config after re-marshalling (Go sorts object

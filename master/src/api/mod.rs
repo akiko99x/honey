@@ -919,7 +919,7 @@ async fn metrics(State(st): State<AppState>) -> Result<Response, ApiError> {
          honey_issues{{severity=\"info\"}} {}\n",
         issue_counts.critical, issue_counts.warning, issue_counts.info,
     );
-    Ok(([(header::CONTENT_TYPE, "text/plain; version=0.0.4")], body).into_response())
+    Ok(([(header::CONTENT_TYPE, "text/plain; version=0.0.5")], body).into_response())
 }
 
 async fn list_issues(
@@ -7255,11 +7255,8 @@ fn validate_inbound(input: &NewInbound) -> Result<(), ApiError> {
     if input.reality && input.reality_public_key.as_deref().unwrap_or("").is_empty() {
         return Err(ApiError::bad_request("reality_public_key is required"));
     }
-    let acme = input.extra.get("acme").is_some_and(|v| !v.is_null());
+    let acme = acme_enabled(&input.extra);
     if acme {
-        if input.core != "singbox" {
-            return Err(ApiError::bad_request("acme is supported only by sing-box"));
-        }
         if input.reality {
             return Err(ApiError::bad_request(
                 "acme and reality are mutually exclusive",
@@ -7278,6 +7275,7 @@ fn validate_inbound(input: &NewInbound) -> Result<(), ApiError> {
                 "acme requires an email (extra.acme.email)",
             ));
         }
+        validate_acme_for_core(&input.core, &input.extra)?;
     }
     validate_effective_security(
         &input.kind,
@@ -7328,7 +7326,7 @@ fn is_valid_network(network: &str) -> bool {
     )
 }
 
-/// email for sing-box ACME: extra.acme.email, or a top-level extra.acme_email.
+/// ACME contact: extra.acme.email, or a legacy top-level extra.acme_email.
 fn acme_email(extra: &JsonValue) -> Option<&str> {
     extra
         .get("acme")
@@ -7395,10 +7393,8 @@ fn validate_effective_update(current: &Inbound, input: &UpdateInbound) -> Result
         .reality_short_ids
         .as_deref()
         .unwrap_or(&current.reality_short_ids);
-    let acme = match &input.extra {
-        Some(v) => v.get("acme").is_some_and(|a| !a.is_null()),
-        None => current.extra.get("acme").is_some_and(|a| !a.is_null()),
-    };
+    let extra = input.extra.as_ref().unwrap_or(&current.extra);
+    let acme = acme_enabled(extra);
     validate_effective_security(
         kind,
         core,
@@ -7416,7 +7412,9 @@ fn validate_effective_update(current: &Inbound, input: &UpdateInbound) -> Result
         ),
         network,
         acme,
-    )
+    )?;
+    let extra = input.extra.as_ref().unwrap_or(&current.extra);
+    validate_acme_for_core(core, extra)
 }
 
 fn effective_string<'a>(patch: &'a Patch<String>, current: &'a Option<String>) -> Option<&'a str> {
@@ -7480,10 +7478,6 @@ fn validate_effective_security(
             "transport '{network}' is not supported by core '{core}'"
         )));
     }
-    if acme && core != "singbox" {
-        return Err(ApiError::bad_request("acme is supported only by sing-box"));
-    }
-
     if kind == "hysteria2" {
         if !tls_enabled {
             return Err(ApiError::bad_request("hysteria2 requires tls_enabled=true"));
@@ -7537,6 +7531,57 @@ fn validate_effective_security(
         }
     }
     Ok(())
+}
+
+fn validate_acme_for_core(core: &str, extra: &JsonValue) -> Result<(), ApiError> {
+    let Some(acme) = extra
+        .get("acme")
+        .filter(|value| !value.is_null() && !value.is_boolean())
+    else {
+        return Ok(());
+    };
+    if acme_email(extra).is_none() {
+        return Err(ApiError::bad_request(
+            "acme requires an email (extra.acme.email)",
+        ));
+    }
+    if core == "singbox" {
+        return Ok(());
+    }
+    if core != "xray" {
+        return Err(ApiError::bad_request(
+            "acme is supported only by sing-box or xray",
+        ));
+    }
+    let Some(acme) = acme.as_object() else {
+        return Err(ApiError::bad_request(
+            "xray acme settings must be an object",
+        ));
+    };
+    if acme
+        .get("disable_http_challenge")
+        .and_then(JsonValue::as_bool)
+        .unwrap_or(false)
+    {
+        return Err(ApiError::bad_request("xray acme supports HTTP-01 only"));
+    }
+    if acme.get("dns01_challenge").is_some() {
+        return Err(ApiError::bad_request("xray acme does not support DNS-01"));
+    }
+    if let Some(port) = acme.get("alternative_http_port") {
+        if port.as_u64() != Some(9080) {
+            return Err(ApiError::bad_request(
+                "xray acme alternative_http_port must be 9080",
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn acme_enabled(extra: &JsonValue) -> bool {
+    extra
+        .get("acme")
+        .is_some_and(|value| !value.is_null() && value != &JsonValue::Bool(false))
 }
 
 fn valid_reality_key(value: &str) -> bool {
@@ -7957,7 +8002,7 @@ mod tests {
     }
 
     #[test]
-    fn rejects_core_transport_and_acme_mismatches() {
+    fn enforces_core_transport_and_acme_compatibility() {
         let mut inbound = valid_reality_inbound();
         inbound.core = "singbox".into();
         inbound.network = "xhttp".into();
@@ -7968,6 +8013,18 @@ mod tests {
         inbound.cert_path = None;
         inbound.key_path = None;
         inbound.extra = json!({"acme": {"email": "ops@example.com"}});
+        assert!(validate_inbound(&inbound).is_ok());
+
+        inbound.extra = json!({"acme": {
+            "email": "ops@example.com",
+            "disable_http_challenge": true
+        }});
+        assert!(validate_inbound(&inbound).is_err());
+
+        inbound.extra = json!({"acme": {
+            "email": "ops@example.com",
+            "alternative_http_port": 9082
+        }});
         assert!(validate_inbound(&inbound).is_err());
 
         inbound.extra = json!({});
@@ -7999,6 +8056,14 @@ mod tests {
         let acme = serde_json::to_value(InboundView::from(acme)).unwrap();
         assert_eq!(acme["certificate_source"], "acme");
         assert_eq!(acme["certificate_status"], "managed");
+
+        let mut xray_acme = stored_inbound();
+        xray_acme.reality = false;
+        xray_acme.core = "xray".into();
+        xray_acme.extra = json!({"acme": {"email": "ops@example.com"}});
+        let xray_acme = serde_json::to_value(InboundView::from(xray_acme)).unwrap();
+        assert_eq!(xray_acme["certificate_source"], "acme");
+        assert_eq!(xray_acme["certificate_status"], "managed");
 
         let mut manual = stored_inbound();
         manual.reality = false;

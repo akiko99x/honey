@@ -119,9 +119,11 @@ func buildInbound(in core.Inbound) (map[string]any, error) {
 		if err := json.Unmarshal(in.ExtraJSON, &extra); err != nil {
 			return nil, fmt.Errorf("inbound %q extra_json: %w", in.Tag, err)
 		}
-		// Used only while rendering client subscriptions; Xray rejects unknown
-		// top-level inbound fields.
+		// Used by Honey control-plane features; Xray rejects unknown top-level
+		// inbound fields. ACME has already been translated to certificate paths
+		// by the agent's Xray certificate manager.
 		delete(extra, "happ")
+		delete(extra, "acme")
 		for k, v := range extra {
 			m[k] = v
 		}

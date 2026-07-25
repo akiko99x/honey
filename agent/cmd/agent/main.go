@@ -30,6 +30,7 @@ import (
 	"github.com/akiko99x/honey/agent/internal/singbox"
 	"github.com/akiko99x/honey/agent/internal/transport"
 	"github.com/akiko99x/honey/agent/internal/xray"
+	"github.com/akiko99x/honey/agent/internal/xrayacme"
 )
 
 func main() {
@@ -44,9 +45,24 @@ func main() {
 	// two parallel cores on one node: sing-box (priority) + xray.
 	clash := singbox.NewClash(cfg.ClashURL, cfg.ClashSecret)
 	sb := singbox.NewManager(cfg.SingboxBin, cfg.SingboxConfig, clash)
+	xr := xray.NewManager(cfg.XrayBin, cfg.XrayConfig, cfg.XrayAPI)
 	cores := map[string]core.Manager{
 		"singbox": sb,
-		"xray":    xray.NewManager(cfg.XrayBin, cfg.XrayConfig, cfg.XrayAPI),
+		"xray":    xr,
+	}
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
+	certManager := xrayacme.New("", "", "")
+	certManager.SetReload(func() error {
+		state, _, _ := xr.Status()
+		if state != core.StateRunning {
+			return nil
+		}
+		return xr.Apply("")
+	})
+	if err := certManager.Start(ctx); err != nil {
+		logx.Fatal(logx.AgentACMEGateway, "Xray ACME gateway failed: %v", err)
 	}
 
 	// durable per-user accounting: reload persisted counters + epoch so stats
@@ -69,15 +85,13 @@ func main() {
 		"xray":    cfg.XrayConfig,
 	})
 	agentSrv.SetStatsEpoch(statsStore.Epoch)
+	agentSrv.SetACMEManager(certManager)
 	honeyv1.RegisterAgentServiceServer(srv, agentSrv)
 
 	transports, err := buildTransports(cfg)
 	if err != nil {
 		logx.Fatal(logx.AgentTransportWiring, "transport wiring failed: %v", err)
 	}
-
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-	defer stop()
 
 	var wg sync.WaitGroup
 	for _, t := range transports {

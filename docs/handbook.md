@@ -308,6 +308,7 @@ Common single-server binds:
 | `:8443` | agent gRPC | public only for remote serve nodes |
 | `127.0.0.1:9090` | sing-box Clash API | never public |
 | `127.0.0.1:8081` | Xray stats/API | never public |
+| `127.0.0.1:9080` | Honey Xray ACME HTTP-01 gateway | Caddy challenge upstream only |
 | inbound ports | sing-box/Xray | public VPN traffic |
 
 ### Hysteria2 checklist
