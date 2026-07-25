@@ -15,7 +15,8 @@ Open **Settings → API keys**, choose a name, role and expiry in days. `0` mean
 no expiry. Copy the token before closing the one-time result dialog.
 
 ```sh
-curl -H 'Authorization: Bearer hny_REPLACE_ME' \
+export HONEY_API_KEY='paste the one-time token here'
+curl -H "Authorization: Bearer ${HONEY_API_KEY:?set HONEY_API_KEY}" \
   https://panel.example.com/honey/nodes
 ```
 

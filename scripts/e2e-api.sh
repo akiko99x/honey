@@ -145,7 +145,7 @@ if [[ -n "${DATABASE_URL:-}" ]] && command -v psql >/dev/null 2>&1; then
 	curl -fsS -X PATCH "${BASE}/users/${user_id}" "${AUTH[@]}" -d '{"traffic_limit_bytes":1}' >/dev/null
 	psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "UPDATE users SET used_traffic_bytes = 2 WHERE id = '${user_id}'" >/dev/null
 	curl -fsS "${BASE}/users/${user_id}" "${AUTH[@]}" | jq -e '.active == false and .suppressed_reason == "quota"' >/dev/null || fail "quota did not suppress user"
-	status="$(curl -sS -o /dev/null -w '%{http_code}' "${BASE}${sub_path}")"
+	status="$(curl -sS -o /dev/null -w '%{http_code}' "${BASE}${sub_path}/v2ray")"
 	[[ "$status" == 410 ]] || fail "quota-suppressed subscription should 410, got ${status}"
 	curl -fsS -X POST "${BASE}/users/${user_id}/reset-traffic" "${AUTH[@]}" | jq -e '.active == true and (.used_traffic_bytes | tonumber) == 0' >/dev/null || fail "traffic reset did not recover quota"
 	curl -fsS -X PATCH "${BASE}/users/${user_id}" "${AUTH[@]}" -d '{"traffic_limit_bytes":0}' >/dev/null
@@ -153,7 +153,7 @@ fi
 
 # --- expiry suppression and null-patch recovery -----------------------------
 curl -fsS -X PATCH "${BASE}/users/${user_id}" "${AUTH[@]}" -d '{"expires_at":"2000-01-01T00:00:00Z"}' | jq -e '.active == false and .suppressed_reason == "expired"' >/dev/null || fail "expiry did not suppress user"
-status="$(curl -sS -o /dev/null -w '%{http_code}' "${BASE}${sub_path}")"
+status="$(curl -sS -o /dev/null -w '%{http_code}' "${BASE}${sub_path}/v2ray")"
 [[ "$status" == 410 ]] || fail "expired subscription should 410, got ${status}"
 curl -fsS -X PATCH "${BASE}/users/${user_id}" "${AUTH[@]}" -d '{"expires_at":null}' | jq -e '.active == true and .expires_at == null' >/dev/null || fail "null expiry patch did not recover user"
 curl -fsS -H "accept: application/json" "${BASE}${sub_path}" | jq -e '.status == "active"' >/dev/null || fail "subscription did not recover after expiry removal"
@@ -165,7 +165,7 @@ curl -fsS -X POST "${BASE}/users/${user_id}/reset-traffic" "${AUTH[@]}" \
 # --- disable makes the subscription 410 ------------------------------------
 curl -fsS -X PATCH "${BASE}/users/${user_id}" "${AUTH[@]}" -d '{"enabled":false}' \
 	| jq -e '.active == false' >/dev/null || fail "user did not disable"
-status="$(curl -sS -o /dev/null -w '%{http_code}' "${BASE}${sub_path}")"
+status="$(curl -sS -o /dev/null -w '%{http_code}' "${BASE}${sub_path}/v2ray")"
 [[ "$status" == 410 ]] || fail "disabled subscription should 410, got ${status}"
 curl -fsS "${BASE}/issues" "${AUTH[@]}" \
 	| jq -e --arg id "$user_id" 'any(.issues[]; .entity_id == $id and (.labels | index("customer:smoke")) != null)' >/dev/null \
