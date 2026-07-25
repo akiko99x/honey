@@ -25,6 +25,8 @@ the database.
 
 ## Requirements
 
+- Preferred production install: Docker Engine with Compose v2 on Ubuntu/Debian.
+  The Docker installer can provision these dependencies.
 - Linux node(s), root or `sudo` for install.
 - Build host: **Rust** (stable) + **Go ≥ 1.23**. Only needed to produce the three
   binaries; nodes just run them.
@@ -55,22 +57,27 @@ they stay out of the default build.
 Master, agent and both cores co-host fine on one box. Bind the agent gRPC and all
 core APIs to loopback; expose only the VPN inbound ports.
 
-For a full single-server bootstrap, run this on a clean Ubuntu/Debian host:
+Docker Compose is the preferred clean-server deployment beginning with v0.0.6:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/akiko99x/honey/main/scripts/bootstrap.sh \
-  -o /tmp/honey-bootstrap.sh
-sudo bash /tmp/honey-bootstrap.sh
-rm -f /tmp/honey-bootstrap.sh
+curl -fsSL https://raw.githubusercontent.com/akiko99x/honey/main/scripts/install-docker.sh \
+  -o /tmp/honey-install-docker.sh
+sudo bash /tmp/honey-install-docker.sh
+rm -f /tmp/honey-install-docker.sh
 ```
 
-The bootstrap asks for the GitHub repository/release, panel domain/path and
-owner credentials. It installs PostgreSQL, Caddy, the verified honey release,
-the database, master certificates and systemd services. By default it also
-installs SHA-256-verified sing-box/Xray releases and enrolls this server as the
-first local VPN node.
+It pulls tagged GHCR images, creates root-only Compose secrets, migrates
+PostgreSQL and can enroll the host as the first node. Database, certificates,
+core configs and Caddy state live in persistent volumes. See
+[`docs/docker-deployment.md`](docs/docker-deployment.md).
 
-For a local build or an unpacked source tree:
+The previous systemd bootstrap remains available as a legacy/fallback path:
+
+```bash
+sudo bash scripts/bootstrap.sh
+```
+
+For a legacy local build or an unpacked source tree:
 
 ```bash
 # 1. binaries + systemd units (see deploy/systemd/ for the unit files)
@@ -258,6 +265,7 @@ honey/
 │   ├── cmd/enroll/        # honey-enroll one-time enrollment client
 │   └── internal/          # core/, singbox/, xray/, mtls/, transport/, grpcserver/
 ├── web/                   # embedded panel + subscription page (served by the master)
+├── deploy/docker/         # preferred Compose stack and production images
 ├── deploy/systemd/        # master, agent and backup service/timer units
 ├── scripts/               # install, release, migration, backup/restore and e2e tools
 └── docs/                  # handbook, focused guides and runbooks

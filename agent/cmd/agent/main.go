@@ -53,7 +53,11 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	certManager := xrayacme.New("", "", "")
+	certManager := xrayacme.New(
+		cfg.XrayACMERoot,
+		cfg.XrayACMEListen,
+		cfg.SingboxACMEUpstream,
+	)
 	certManager.SetReload(func() error {
 		state, _, _ := xr.Status()
 		if state != core.StateRunning {

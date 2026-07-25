@@ -919,7 +919,7 @@ async fn metrics(State(st): State<AppState>) -> Result<Response, ApiError> {
          honey_issues{{severity=\"info\"}} {}\n",
         issue_counts.critical, issue_counts.warning, issue_counts.info,
     );
-    Ok(([(header::CONTENT_TYPE, "text/plain; version=0.0.5")], body).into_response())
+    Ok(([(header::CONTENT_TYPE, "text/plain; version=0.0.6")], body).into_response())
 }
 
 async fn list_issues(

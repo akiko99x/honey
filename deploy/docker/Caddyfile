@@ -1,0 +1,12 @@
+http://{$HONEY_PANEL_DOMAIN} {
+	handle /.well-known/acme-challenge/* {
+		reverse_proxy 127.0.0.1:9080
+	}
+	handle {
+		redir https://{host}{uri} permanent
+	}
+}
+
+https://{$HONEY_PANEL_DOMAIN} {
+	reverse_proxy 127.0.0.1:8080
+}

@@ -1,0 +1,81 @@
+# honey Docker deployment
+
+This directory is the production Docker Compose deployment for honey. It keeps
+the former systemd deployment available as a fallback, but all honey
+application processes run in containers:
+
+- PostgreSQL 17 with a persistent named volume;
+- honey master and migration job;
+- honey agent with bundled sing-box and Xray;
+- Caddy on the host network;
+- a PostgreSQL 17 backup container.
+
+Master, agent and Caddy use host networking intentionally. The panel and ACME
+gateway continue to use loopback, while dynamically-created VPN inbound ports
+do not require Compose file changes. PostgreSQL alone publishes its port on
+`127.0.0.1`.
+
+## Install
+
+Run the installer from a published release:
+
+```bash
+sudo bash scripts/install-docker.sh
+```
+
+Non-interactive:
+
+```bash
+sudo env \
+  HONEY_PANEL_DOMAIN=panel.example.com \
+  HONEY_ADMIN_USERNAME=owner \
+  HONEY_ADMIN_PASSWORD='replace-me' \
+  HONEY_INSTALL_LOCAL_NODE=1 \
+  bash scripts/install-docker.sh --non-interactive
+```
+
+The deployment lives in `/opt/honey-docker` by default. Secrets are ordinary
+root-only files consumed through Compose secrets; they are not placed in
+container environment variables.
+
+The three GHCR packages (`honey-master`, `honey-agent`, and `honey-backup`)
+must be public so a fresh host can pull them without GitHub credentials. Check
+their package visibility after the first container release; GHCR package
+visibility is separate from repository visibility.
+
+## Operations
+
+```bash
+cd /opt/honey-docker
+docker compose ps
+docker compose logs -f master agent caddy
+./scripts/docker-backup.sh
+./scripts/docker-restore-check.sh honey-YYYYMMDDTHHMMSSZ.dump
+./scripts/install-docker.sh --upgrade
+```
+
+Never use `docker compose down --volumes` on a production deployment. That
+explicitly deletes PostgreSQL, configuration, certificate and Caddy volumes.
+
+## Host requirements
+
+- Ubuntu or Debian on amd64;
+- public TCP 80/443 for Caddy;
+- any VPN TCP/UDP ports configured in the panel;
+- TCP 9443 only when dial-mode agents use the master acceptor;
+- Docker Engine with Compose v2.
+
+The agent keeps only `NET_ADMIN` and `NET_BIND_SERVICE`, but runs as root inside
+its container because nftables, WireGuard helpers and arbitrary low inbound
+ports are part of the node runtime. The other long-running services run without
+these capabilities. Master and agent configuration volumes are separate, so
+the node container cannot read the master CA private key.
+
+## Legacy migration
+
+Do not start this Compose stack alongside an active systemd honey deployment:
+they share ports 80, 443, 8080, 8443, 9080 and 9443. Before migrating, take a
+database backup and copy `/etc/honey`. The initial Docker release is intended
+for clean-server rehearsal; migration of an existing production host should be
+performed from the documented backup/restore runbook after validating the new
+stack on a disposable server.

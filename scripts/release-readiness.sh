@@ -66,7 +66,9 @@ grep -q 'AGPL-3.0-only' README.md || fail "README license declaration missing"
 for file in \
 	README.md CHANGELOG.md SECURITY.md SUPPORT.md CONTRIBUTING.md LICENSE \
 	docs/handbook.md docs/error-codes.md docs/release-checklist.md \
-	docs/github-publication.md .github/PULL_REQUEST_TEMPLATE.md \
+	docs/github-publication.md docs/docker-deployment.md \
+	deploy/docker/compose.yml deploy/docker/Caddyfile deploy/docker/README.md \
+	.github/PULL_REQUEST_TEMPLATE.md \
 	.github/ISSUE_TEMPLATE/bug_report.yml .github/dependabot.yml; do
 	[[ -s "$file" ]] || fail "required release file missing: $file"
 done
@@ -91,6 +93,22 @@ echo "migrations: 0001..$(printf '%04d' "$previous") (ordered; gaps allowed)"
 step "static syntax"
 node --check web/app.js
 bash -n scripts/*.sh
+bash -n deploy/docker/*.sh
+grep -Fq '${HONEY_POSTGRES_BIND:-127.0.0.1}' deploy/docker/compose.yml ||
+	fail "Docker PostgreSQL must bind to loopback by default"
+grep -Fq 'master_config:/etc/honey' deploy/docker/compose.yml ||
+	fail "Docker master must use a dedicated config volume"
+grep -Fq 'agent_config:/etc/honey' deploy/docker/compose.yml ||
+	fail "Docker agent must use a dedicated config volume"
+if grep -Eq '/var/run/docker\.sock|/run/docker\.sock' deploy/docker/compose.yml; then
+	fail "Docker socket must not be mounted into honey services"
+fi
+if command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1; then
+	HONEY_PANEL_DOMAIN=panel.example.com \
+		docker compose -f deploy/docker/compose.yml config --quiet
+else
+	echo "Docker Compose syntax check skipped (docker compose unavailable)"
+fi
 echo "UI and shell syntax: ok"
 
 step "bootstrap sandbox contract"
@@ -155,7 +173,9 @@ contents="$(tar -tzf "$archive")"
 for required in \
 	bin/honey-master bin/honey-agent bin/honey-enroll \
 	scripts/install.sh scripts/install-release.sh scripts/bootstrap.sh \
-	README.md LICENSE deploy/systemd/honey-master.service; do
+	scripts/install-docker.sh scripts/docker-backup.sh scripts/docker-restore-check.sh \
+	README.md LICENSE deploy/systemd/honey-master.service \
+	deploy/docker/compose.yml deploy/docker/Caddyfile; do
 	grep -q "honey-${version}-linux-amd64/${required}$" <<<"$contents" || fail "archive missing $required"
 done
 if grep -E '\.(key|pem|p12|pfx|db|sqlite|log|env)$' <<<"$contents"; then

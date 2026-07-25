@@ -24,6 +24,10 @@ type Config struct {
 	XrayBin    string // path to xray binary
 	XrayConfig string // where the agent writes xray config.json
 	XrayAPI    string // xray gRPC stats api addr (stats collection TBD)
+
+	XrayACMERoot        string // persistent Xray ACME cache + exported PEMs
+	XrayACMEListen      string // local HTTP-01 gateway
+	SingboxACMEUpstream string // sing-box HTTP-01 listener behind the gateway
 }
 
 // Parse reads flags into a Config.
@@ -43,6 +47,9 @@ func Parse() *Config {
 	flag.StringVar(&c.XrayBin, "xray-bin", "/usr/local/bin/xray", "xray binary")
 	flag.StringVar(&c.XrayConfig, "xray-config", "/etc/honey/xray/config.json", "xray config path")
 	flag.StringVar(&c.XrayAPI, "xray-api", "127.0.0.1:8081", "xray grpc stats api addr")
+	flag.StringVar(&c.XrayACMERoot, "xray-acme-root", "/etc/honey/xray/acme", "Xray ACME state directory")
+	flag.StringVar(&c.XrayACMEListen, "xray-acme-listen", "127.0.0.1:9080", "Xray ACME HTTP-01 gateway")
+	flag.StringVar(&c.SingboxACMEUpstream, "singbox-acme-upstream", "127.0.0.1:9082", "sing-box ACME listener behind the gateway")
 	flag.Parse()
 	return c
 }

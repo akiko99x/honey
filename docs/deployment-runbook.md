@@ -1,6 +1,8 @@
-# honey single-server deployment runbook
+# honey legacy systemd deployment runbook
 
-This is the repeatable path for a Linux alpha deployment. It keeps the
+Docker Compose is the preferred clean-install deployment; see
+[`docker-deployment.md`](docker-deployment.md). This is the repeatable systemd
+fallback path. It keeps the
 control plane, agent state and core configs outside `/tmp`; smoke tests may
 still use `/tmp`, but that is not a production layout.
 

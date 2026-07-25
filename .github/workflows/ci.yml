@@ -45,6 +45,11 @@ jobs:
         run: |
           node --check web/app.js
           bash -n scripts/*.sh
+          bash -n deploy/docker/*.sh
+      - name: Docker Compose model
+        env:
+          HONEY_PANEL_DOMAIN: panel.example.com
+        run: docker compose -f deploy/docker/compose.yml config --quiet
       - name: Release metadata preflight
         run: bash scripts/release-readiness.sh --static
 

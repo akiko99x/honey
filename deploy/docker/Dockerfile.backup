@@ -1,0 +1,14 @@
+FROM postgres:17-alpine
+LABEL org.opencontainers.image.source="https://github.com/akiko99x/honey" \
+      org.opencontainers.image.description="honey PostgreSQL backup and restore rehearsal"
+
+RUN apk add --no-cache bash coreutils findutils gnupg
+COPY scripts/backup-postgres.sh /usr/local/bin/backup-postgres.sh
+COPY scripts/restore-check.sh /usr/local/bin/restore-check.sh
+COPY deploy/docker/backup-entrypoint.sh /usr/local/bin/honey-backup-entrypoint
+RUN chmod 0755 /usr/local/bin/backup-postgres.sh \
+    /usr/local/bin/restore-check.sh /usr/local/bin/honey-backup-entrypoint \
+    && install -d -m 0700 /backups
+
+ENTRYPOINT ["/usr/local/bin/honey-backup-entrypoint"]
+CMD ["loop"]

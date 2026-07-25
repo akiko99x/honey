@@ -64,25 +64,23 @@ HTTP listener and does not replace the reverse proxy.
 
 ## 3. Fast install on Ubuntu/Debian
 
-The supported one-command entry point is the bootstrap script. It installs
-PostgreSQL, Caddy, common tools, a verified honey release, mTLS material,
-systemd units and (by default) verified sing-box/Xray releases. It can also
-enroll the host as the first local serve node.
+Docker Compose is the preferred clean-server deployment beginning with v0.0.6.
+The installer installs Docker Engine/Compose when needed, pulls tagged honey
+images, creates persistent volumes and root-only secrets, starts PostgreSQL,
+Caddy and backups, and can enroll the host as the first local serve node.
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/akiko99x/honey/main/scripts/bootstrap.sh \
-  -o /tmp/honey-bootstrap.sh
-sudo bash /tmp/honey-bootstrap.sh
-rm -f /tmp/honey-bootstrap.sh
+curl -fsSL https://raw.githubusercontent.com/akiko99x/honey/main/scripts/install-docker.sh \
+  -o /tmp/honey-install-docker.sh
+sudo bash /tmp/honey-install-docker.sh
+rm -f /tmp/honey-install-docker.sh
 ```
 
 Interactive prompts cover:
 
-1. GitHub repository and release;
-2. panel domain and path (default `/panel`);
-3. owner username and password;
-4. optional Caddy ACME email;
-5. whether this host should become the first VPN node.
+1. panel domain;
+2. owner username and password;
+3. whether this host should become the first VPN node.
 
 The DNS A/AAAA record must already point to the host. TCP `80`/`443` are needed
 for Caddy certificate issuance and HTTPS. If the host uses TCP `443` for
@@ -94,20 +92,21 @@ For automation:
 ```bash
 sudo env \
   HONEY_PANEL_DOMAIN=panel.example.com \
-  HONEY_PANEL_PATH=/panel \
   HONEY_ADMIN_USERNAME=owner \
   HONEY_ADMIN_PASSWORD='use-a-long-secret' \
-  HONEY_CADDY_EMAIL=ops@example.com \
   HONEY_INSTALL_LOCAL_NODE=1 \
-  bash /tmp/honey-bootstrap.sh --non-interactive
+  bash /tmp/honey-install-docker.sh --non-interactive
 ```
 
-The bootstrap is Ubuntu/Debian-specific. It is not a Docker installer and does
-not silently overwrite an existing database or `/etc/honey` configuration.
-Use `--force` only when you have a verified backup and understand the service
-replacement.
+The installer refuses to run beside an active systemd honey deployment because
+the two stacks share host ports. Rehearse Docker on a clean server and follow
+[`docker-deployment.md`](docker-deployment.md) for upgrades, health checks and
+backup/restore rehearsals.
 
-## 4. Release and manual installation
+## 4. Legacy systemd and manual installation
+
+The previous `scripts/bootstrap.sh`, release installer and systemd units remain
+available as a compatibility and recovery path.
 
 `scripts/install-release.sh` downloads a published Linux release and verifies
 the archive SHA-256 before invoking the safe installer:
@@ -147,7 +146,7 @@ not use it for a network download.
 
 ## 5. Build from source
 
-Requirements: stable Rust, Go matching `agent/go.mod` (Go 1.23 or newer), Node
+Requirements: stable Rust, Go matching `agent/go.mod` (Go 1.25 or newer), Node
 for syntax checks, PostgreSQL for integration/lifecycle scripts, and Buf when
 regenerating protobuf stubs.
 

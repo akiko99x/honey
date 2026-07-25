@@ -28,7 +28,7 @@ import (
 	"github.com/akiko99x/honey/agent/internal/xrayacme"
 )
 
-const agentVersion = "0.0.5"
+const agentVersion = "0.0.6"
 
 // Server implements honeyv1.AgentServiceServer.
 type Server struct {

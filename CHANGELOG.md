@@ -5,6 +5,24 @@ version tags and is currently pre-stable.
 
 ## [Unreleased]
 
+## [0.0.6] - 2026-07-26
+
+### Added
+
+- Production Docker Compose deployment for PostgreSQL, master, agent, Caddy
+  and scheduled PostgreSQL backups.
+- Tagged GHCR images for master, agent and backup, published by the release
+  workflow.
+- Docker installer, upgrade command, backup/restore helpers and clean-server
+  deployment runbook.
+- Configurable Honey-managed Xray ACME paths and challenge addresses for
+  container deployments.
+
+### Changed
+
+- Docker Compose is the preferred clean-install path; systemd remains available
+  as a legacy and recovery fallback.
+
 ## [0.0.5] - 2026-07-26
 
 ### Added
@@ -78,12 +96,14 @@ version tags and is currently pre-stable.
 - Serve and NAT-friendly dial transports.
 - VLESS/REALITY and Hysteria2 release smoke coverage, subscription exports,
   traffic accounting, quotas, expiry and operational diagnostics.
-- Interactive Ubuntu/Debian bootstrap, checksummed release installer, backups,
-  restore rehearsal and opt-in GitHub self-update.
+- Docker Compose deployment plus the legacy Ubuntu/Debian bootstrap,
+  checksummed release installer, backups, restore rehearsal and opt-in GitHub
+  self-update.
 - GitHub Actions for tests, database recovery, secret scanning and release
   packaging.
 
-[Unreleased]: https://github.com/akiko99x/honey/compare/v0.0.5...HEAD
+[Unreleased]: https://github.com/akiko99x/honey/compare/v0.0.6...HEAD
+[0.0.6]: https://github.com/akiko99x/honey/compare/v0.0.5...v0.0.6
 [0.0.5]: https://github.com/akiko99x/honey/compare/v0.0.4...v0.0.5
 [0.0.4]: https://github.com/akiko99x/honey/compare/v0.0.3...v0.0.4
 [0.0.3]: https://github.com/akiko99x/honey/compare/v0.0.2...v0.0.3

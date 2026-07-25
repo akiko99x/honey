@@ -1,0 +1,38 @@
+# syntax=docker/dockerfile:1.7
+FROM rust:bookworm AS builder
+
+WORKDIR /src
+COPY master ./master
+COPY proto ./proto
+COPY web ./web
+RUN cargo build --locked --release \
+    --manifest-path master/Cargo.toml \
+    --features dial-acceptor,acme
+
+FROM debian:bookworm-slim
+LABEL org.opencontainers.image.source="https://github.com/akiko99x/honey" \
+      org.opencontainers.image.description="honey control plane"
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+       bash ca-certificates curl openssl \
+    && rm -rf /var/lib/apt/lists/* \
+    && groupadd --gid 10001 honey \
+    && useradd --uid 10001 --gid honey --home-dir /var/lib/honey \
+       --create-home --shell /usr/sbin/nologin honey \
+    && install -d -o honey -g honey -m 0750 \
+       /etc/honey /etc/honey/certs /etc/honey/master-certs \
+       /etc/honey/sing-box /etc/honey/xray /var/lib/honey \
+    && install -d -o honey -g honey -m 0700 /var/lib/honey/backups
+
+COPY --from=builder /src/master/target/release/honey-master /usr/local/bin/honey-master
+COPY scripts/gen-certs.sh /usr/local/bin/gen-certs.sh
+COPY deploy/docker/master-entrypoint.sh /usr/local/bin/honey-master-entrypoint
+RUN chmod 0755 /usr/local/bin/honey-master /usr/local/bin/gen-certs.sh \
+    /usr/local/bin/honey-master-entrypoint
+
+USER honey
+WORKDIR /var/lib/honey
+ENTRYPOINT ["/usr/local/bin/honey-master-entrypoint"]
+CMD ["run", "--api-listen", "127.0.0.1:8080", "--dial-listen", "0.0.0.0:9443"]
+HEALTHCHECK --interval=15s --timeout=5s --start-period=20s --retries=5 \
+  CMD curl -fsS http://127.0.0.1:8080/health >/dev/null || exit 1

@@ -1,6 +1,19 @@
 # Upgrades & self-update
 
-## One-click self-update from GitHub
+## Docker image upgrades
+
+Docker deployments upgrade through the root-owned installer:
+
+```bash
+sudo /opt/honey-docker/scripts/install-docker.sh --upgrade
+```
+
+It creates a PostgreSQL backup, updates the pinned image tag, pulls the
+master/agent/backup images and recreates the stack. The one-shot migration
+container must complete before master starts. In-container binary replacement
+is intentionally not used for Docker deployments.
+
+## Legacy systemd self-update from GitHub
 
 Panel → Settings → Software update checks GitHub Releases for a newer master
 and, when enabled, installs it.

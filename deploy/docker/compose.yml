@@ -1,0 +1,165 @@
+name: honey
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: honey
+      POSTGRES_DB: honey
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password
+    secrets:
+      - postgres_password
+    ports:
+      - "${HONEY_POSTGRES_BIND:-127.0.0.1}:${HONEY_POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U honey -d honey"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    security_opt:
+      - no-new-privileges:true
+
+  migrate:
+    image: "${HONEY_IMAGE_PREFIX:-ghcr.io/akiko99x/honey}-master:${HONEY_VERSION:-0.0.6}"
+    network_mode: host
+    restart: "no"
+    command: ["migrate"]
+    environment:
+      HONEY_POSTGRES_HOST: 127.0.0.1
+      HONEY_POSTGRES_PORT: "${HONEY_POSTGRES_PORT:-5432}"
+      HONEY_SECRET_KEY_FILE: /run/secrets/honey_master_key
+    secrets:
+      - postgres_password
+      - honey_master_key
+    depends_on:
+      postgres:
+        condition: service_healthy
+    read_only: true
+    tmpfs:
+      - /tmp:size=32m,mode=1777
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+
+  master:
+    image: "${HONEY_IMAGE_PREFIX:-ghcr.io/akiko99x/honey}-master:${HONEY_VERSION:-0.0.6}"
+    network_mode: host
+    restart: unless-stopped
+    init: true
+    environment:
+      HONEY_POSTGRES_HOST: 127.0.0.1
+      HONEY_POSTGRES_PORT: "${HONEY_POSTGRES_PORT:-5432}"
+      HONEY_SECRET_KEY_FILE: /run/secrets/honey_master_key
+      HONEY_CERTS_DIR: /etc/honey/master-certs
+      HONEY_UPDATE_REPO: "${HONEY_UPDATE_REPO:-akiko99x/honey}"
+      RUST_LOG: "${RUST_LOG:-info}"
+    secrets:
+      - postgres_password
+      - honey_master_key
+    volumes:
+      - master_config:/etc/honey
+      - master_state:/var/lib/honey
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+
+  agent:
+    profiles: ["node"]
+    image: "${HONEY_IMAGE_PREFIX:-ghcr.io/akiko99x/honey}-agent:${HONEY_VERSION:-0.0.6}"
+    network_mode: host
+    restart: unless-stopped
+    init: true
+    cap_drop:
+      - ALL
+    cap_add:
+      - NET_ADMIN
+      - NET_BIND_SERVICE
+    environment:
+      HONEY_XRAY_ACME_LISTEN: 127.0.0.1:9080
+      HONEY_XRAY_ACME_ROOT: /etc/honey/xray/acme
+      HONEY_SINGBOX_ACME_UPSTREAM: 127.0.0.1:9082
+    volumes:
+      - agent_config:/etc/honey
+      - agent_state:/var/lib/honey
+      - wireguard_config:/etc/wireguard
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+      - /run:size=16m,mode=0755
+    security_opt:
+      - no-new-privileges:true
+
+  caddy:
+    image: caddy:2-alpine
+    network_mode: host
+    restart: unless-stopped
+    environment:
+      HONEY_PANEL_DOMAIN: "${HONEY_PANEL_DOMAIN:?set HONEY_PANEL_DOMAIN}"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      master:
+        condition: service_healthy
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    cap_drop:
+      - ALL
+    cap_add:
+      - NET_BIND_SERVICE
+    security_opt:
+      - no-new-privileges:true
+
+  backup:
+    image: "${HONEY_IMAGE_PREFIX:-ghcr.io/akiko99x/honey}-backup:${HONEY_VERSION:-0.0.6}"
+    restart: unless-stopped
+    environment:
+      HONEY_POSTGRES_HOST: postgres
+      HONEY_BACKUP_KEEP: "${HONEY_BACKUP_KEEP:-14}"
+      HONEY_BACKUP_INITIAL_DELAY_SECONDS: "${HONEY_BACKUP_INITIAL_DELAY_SECONDS:-300}"
+      HONEY_BACKUP_INTERVAL_SECONDS: "${HONEY_BACKUP_INTERVAL_SECONDS:-86400}"
+    secrets:
+      - postgres_password
+    volumes:
+      - "${HONEY_BACKUP_DIR:-./backups}:/backups"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+
+secrets:
+  postgres_password:
+    file: ./secrets/postgres_password
+  honey_master_key:
+    file: ./secrets/honey_master_key
+
+volumes:
+  postgres_data:
+  master_config:
+  master_state:
+  agent_config:
+  agent_state:
+  wireguard_config:
+  caddy_data:
+  caddy_config:

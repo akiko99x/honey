@@ -1,0 +1,61 @@
+# syntax=docker/dockerfile:1.7
+FROM golang:1.25-bookworm AS honey-builder
+
+WORKDIR /src
+COPY agent ./agent
+RUN cd agent \
+    && CGO_ENABLED=0 go build -trimpath -ldflags='-s -w' \
+       -o /out/honey-agent ./cmd/agent \
+    && CGO_ENABLED=0 go build -trimpath -ldflags='-s -w' \
+       -o /out/honey-enroll ./cmd/enroll
+
+FROM debian:bookworm-slim AS cores
+ARG SINGBOX_VERSION=v1.13.14
+ARG XRAY_VERSION=v26.3.27
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+       bash ca-certificates curl python3 tar unzip coreutils \
+    && rm -rf /var/lib/apt/lists/*
+COPY scripts/fetch-github-release-asset.sh /usr/local/bin/fetch-release-asset
+RUN --mount=type=secret,id=GITHUB_TOKEN \
+    if [ -r /run/secrets/GITHUB_TOKEN ]; then \
+      export GITHUB_TOKEN="$(cat /run/secrets/GITHUB_TOKEN)"; \
+    fi \
+    && chmod 0755 /usr/local/bin/fetch-release-asset \
+    && mkdir -p /out /tmp/sing-box /tmp/xray \
+    && archive="$(fetch-release-asset SagerNet/sing-box "$SINGBOX_VERSION" \
+       'sing-box-[0-9A-Za-z.-]+-linux-amd64\.tar\.gz' /tmp/sing-box)" \
+    && tar -xzf "$archive" -C /tmp/sing-box \
+    && install -m 0755 "$(find /tmp/sing-box -type f -name sing-box -print -quit)" /out/sing-box \
+    && archive="$(fetch-release-asset XTLS/Xray-core "$XRAY_VERSION" \
+       'Xray-linux-64\.zip' /tmp/xray)" \
+    && unzip -q "$archive" -d /tmp/xray/unpacked \
+    && install -m 0755 /tmp/xray/unpacked/xray /out/xray
+
+FROM caddy:2-alpine AS caddy-binary
+
+FROM debian:bookworm-slim
+LABEL org.opencontainers.image.source="https://github.com/akiko99x/honey" \
+      org.opencontainers.image.description="honey VPN node agent with sing-box and Xray"
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+       bash ca-certificates curl iproute2 iptables nftables wireguard-tools \
+    && rm -rf /var/lib/apt/lists/* \
+    && install -d -m 0750 \
+       /etc/honey /etc/honey/certs /etc/honey/sing-box /etc/honey/xray \
+       /etc/wireguard /var/lib/honey
+
+COPY --from=honey-builder /out/honey-agent /usr/local/bin/honey-agent
+COPY --from=honey-builder /out/honey-enroll /usr/local/bin/honey-enroll
+COPY --from=cores /out/sing-box /usr/local/bin/sing-box
+COPY --from=cores /out/xray /usr/local/bin/xray
+COPY --from=caddy-binary /usr/bin/caddy /usr/local/bin/caddy
+COPY deploy/docker/agent-entrypoint.sh /usr/local/bin/honey-agent-entrypoint
+RUN chmod 0755 /usr/local/bin/honey-agent /usr/local/bin/honey-enroll \
+    /usr/local/bin/sing-box /usr/local/bin/xray /usr/local/bin/caddy \
+    /usr/local/bin/honey-agent-entrypoint
+
+WORKDIR /var/lib/honey
+ENTRYPOINT ["/usr/local/bin/honey-agent-entrypoint"]
+HEALTHCHECK --interval=15s --timeout=5s --start-period=20s --retries=5 \
+  CMD sh -c 'kill -0 1'
