@@ -54,7 +54,10 @@ for ((index = 0; index < BASELINE_MIGRATIONS; index++)); do
 	psql "$database_url" -v ON_ERROR_STOP=1 -f "$migration" >/dev/null
 	psql "$database_url" -v ON_ERROR_STOP=1 \
 		-v version="$((10#$version))" -v description="$description" -v checksum="$checksum" \
-		-c "INSERT INTO _sqlx_migrations(version, description, success, checksum, execution_time) VALUES (:version, :'description', true, decode(:'checksum', 'hex'), 0);" >/dev/null
+		<<'SQL' >/dev/null
+INSERT INTO _sqlx_migrations(version, description, success, checksum, execution_time)
+VALUES (:version, :'description', true, decode(:'checksum', 'hex'), 0);
+SQL
 done
 
 DATABASE_URL="$database_url" "$HONEY_MASTER_BIN" migrate >/dev/null
@@ -65,11 +68,11 @@ actual="$(psql "$database_url" -tAc "SELECT count(*) FROM _sqlx_migrations WHERE
 	exit 1
 }
 for table in notify_channels node_groups node_group_nodes user_node_groups saved_views admin_login_events system_notifications admin_notification_reads; do
-	psql "$database_url" -v table="$table" -tAc \
-		"SELECT 1 FROM information_schema.tables WHERE table_name = :'table';" | grep -qx 1
+	psql "$database_url" -tAc \
+		"SELECT 1 FROM information_schema.tables WHERE table_name = '${table}';" | grep -qx 1
 done
 for table in nodes inbounds users; do
-	psql "$database_url" -v table="$table" -tAc \
-		"SELECT 1 FROM information_schema.columns WHERE table_name = :'table' AND column_name = 'labels';" | grep -qx 1
+	psql "$database_url" -tAc \
+		"SELECT 1 FROM information_schema.columns WHERE table_name = '${table}' AND column_name = 'labels';" | grep -qx 1
 done
 echo "upgrade ok: ${BASELINE_MIGRATIONS} baseline migrations -> ${actual} current migrations"
