@@ -27,7 +27,9 @@ fi
 
 cleanup() {
 	psql "$admin_url" -c "DROP DATABASE IF EXISTS ${scratch};" >/dev/null 2>&1 || true
-	[[ -n "$tmp" ]] && rm -f "$tmp"
+	if [[ -n "$tmp" ]]; then
+		rm -f "$tmp"
+	fi
 }
 trap cleanup EXIT
 
