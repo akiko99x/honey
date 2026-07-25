@@ -25,8 +25,15 @@ PORT_BASE=$((20000 + ($$ % 10000)))
 API_PORT="${HONEY_LIFECYCLE_API_PORT:-$PORT_BASE}"
 AGENT_PORT="${HONEY_LIFECYCLE_AGENT_PORT:-$((PORT_BASE + 1))}"
 INBOUND_PORT="${HONEY_LIFECYCLE_INBOUND_PORT:-$((PORT_BASE + 2))}"
+XRAY_ACME_PORT="${HONEY_LIFECYCLE_XRAY_ACME_PORT:-$((PORT_BASE + 3))}"
+SINGBOX_ACME_PORT="${HONEY_LIFECYCLE_SINGBOX_ACME_PORT:-$((PORT_BASE + 4))}"
 BASE="http://127.0.0.1:${API_PORT}"
 AUTH=(-H "authorization: Bearer ${API_TOKEN}" -H 'content-type: application/json')
+AGENT_ACME_ARGS=(
+	--xray-acme-root "$WORK/xray-acme"
+	--xray-acme-listen "127.0.0.1:${XRAY_ACME_PORT}"
+	--singbox-acme-upstream "127.0.0.1:${SINGBOX_ACME_PORT}"
+)
 master_pid=""
 agent_pid=""
 node_id=""
@@ -65,7 +72,7 @@ SQL
 trap cleanup EXIT INT TERM
 
 [[ "$(uname -s)" == "Linux" ]] || { echo "lifecycle harness requires Linux" >&2; exit 1; }
-for port in "$API_PORT" "$AGENT_PORT" "$INBOUND_PORT"; do
+for port in "$API_PORT" "$AGENT_PORT" "$INBOUND_PORT" "$XRAY_ACME_PORT" "$SINGBOX_ACME_PORT"; do
 	if command -v ss >/dev/null && ss -H -ltn "sport = :$port" | grep -q .; then
 		echo "port $port is occupied" >&2
 		exit 1
@@ -106,6 +113,7 @@ start_master() {
 start_agent() {
 	setsid "$AGENT_BIN" \
 		--mode serve --listen "127.0.0.1:${AGENT_PORT}" --node-id "$node_id" \
+		"${AGENT_ACME_ARGS[@]}" \
 		--ca "$WORK/agent-certs/ca.crt" --cert "$WORK/agent-certs/agent.crt" --key "$WORK/agent-certs/agent.key" \
 		--singbox-bin "$WORK/fake-core" --singbox-config "$WORK/config/sing-box.json" \
 		--xray-bin "$WORK/fake-core" --xray-config "$WORK/config/xray.json" \
@@ -168,6 +176,7 @@ master_pid=""
 stop_agent_group
 setsid "$AGENT_BIN" \
 	--mode serve --listen "127.0.0.1:${AGENT_PORT}" --node-id "$node_id" \
+	"${AGENT_ACME_ARGS[@]}" \
 	--ca "$WORK/agent-certs/ca.crt" --cert "$WORK/agent-certs/agent.crt" --key "$WORK/agent-certs/agent.key" \
 	--singbox-bin "$WORK/fake-core" --singbox-config "$WORK/config/sing-box.json" \
 	--xray-bin "$WORK/fake-core" --xray-config "$WORK/config/xray.json" \
