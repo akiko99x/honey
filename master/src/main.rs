@@ -270,6 +270,14 @@ async fn main() -> Result<()> {
         base.with(tracing_subscriber::fmt::layer()).init();
     }
 
+    let cmd = Cli::parse().cmd;
+    if matches!(&cmd, Cmd::Keygen) {
+        // Keep stdout machine-readable for command substitution in bootstrap
+        // and recovery scripts. Key generation does not need the current key.
+        println!("{}", secret::generate_key_b64()?);
+        return Ok(());
+    }
+
     // load the at-rest encryption key (if any) before anything touches the db.
     // the key may come from env, a mounted file, HashiCorp Vault or a command —
     // see the secret_source module for precedence.
@@ -292,13 +300,10 @@ async fn main() -> Result<()> {
         );
     }
 
-    match Cli::parse().cmd {
+    match cmd {
         Cmd::Ping { agent, certs_dir } => ping(&agent, &certs_dir).await,
         Cmd::Migrate { database_url } => migrate(&database_url).await,
-        Cmd::Keygen => {
-            println!("{}", secret::generate_key_b64()?);
-            Ok(())
-        }
+        Cmd::Keygen => unreachable!("keygen is handled before secret initialization"),
         Cmd::Reencrypt { database_url } => reencrypt(&database_url).await,
         Cmd::Rekey {
             old_key,
