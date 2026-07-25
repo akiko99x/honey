@@ -122,6 +122,36 @@ func TestBuildConfig_DuplicateTag(t *testing.T) {
 	}
 }
 
+func TestBuildConfig_ACMEUsesWritablePersistentDirectory(t *testing.T) {
+	raw, err := BuildConfig(core.Spec{Inbounds: []core.Inbound{{
+		Tag: "tls-in", Type: "hysteria2", Port: 8443,
+		TLS:       &core.TLS{Enabled: true, ServerName: "PL.Example.com"},
+		ExtraJSON: []byte(`{"acme":{"email":"ops@example.com","disable_tls_alpn_challenge":true},"happ":{"name":"Poland"}}`),
+	}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var cfg map[string]any
+	if err := json.Unmarshal(raw, &cfg); err != nil {
+		t.Fatal(err)
+	}
+	inbound := cfg["inbounds"].([]any)[0].(map[string]any)
+	if _, ok := inbound["happ"]; ok {
+		t.Fatalf("subscription-only metadata leaked into sing-box config: %#v", inbound)
+	}
+	tls := inbound["tls"].(map[string]any)
+	acme := tls["acme"].(map[string]any)
+	if acme["data_directory"] != "/etc/honey/sing-box/acme/pl.example.com" {
+		t.Fatalf("unexpected ACME data directory: %#v", acme["data_directory"])
+	}
+	if acme["default_server_name"] != "PL.Example.com" {
+		t.Fatalf("default_server_name not set: %#v", acme)
+	}
+	if _, ok := tls["certificate_path"]; ok {
+		t.Fatalf("certificate_path must be removed when ACME is enabled: %#v", tls)
+	}
+}
+
 func TestBuildConfig_RejectsXrayOnlyTransport(t *testing.T) {
 	_, err := BuildConfig(core.Spec{Inbounds: []core.Inbound{{
 		Tag: "bad-xhttp", Type: "vless", Port: 443,

@@ -43,6 +43,16 @@ pub fn expand_endpoints(endpoints: Vec<SubscriptionEndpoint>) -> Vec<Subscriptio
             let mut alt = endpoint.clone();
             alt.address = addr;
             alt.tag = format!("{}-alt{}", endpoint.tag, i + 1);
+            if let Some(name) = alt
+                .extra
+                .get_mut("happ")
+                .and_then(Json::as_object_mut)
+                .and_then(|happ| happ.get_mut("name"))
+            {
+                if let Some(base) = name.as_str() {
+                    *name = json!(format!("{base} · alt {}", i + 1));
+                }
+            }
             out.push(alt);
         }
     }
@@ -377,7 +387,7 @@ pub fn clash_config(
 }
 
 fn clash_proxy(user: &User, e: &SubscriptionEndpoint) -> Result<(String, Json)> {
-    let name = format!("{}-{}", e.node_name, e.tag);
+    let name = client_label(user, e);
     let server = connect_host(e).to_string();
     let network = if e.network.is_empty() {
         "tcp"
@@ -499,6 +509,21 @@ pub fn userinfo_header(user: &User) -> String {
     format!("upload=0; download={used}; total={total}; expire={expire}")
 }
 
+/// Happ and the common XTLS subscription convention accept a UTF-8 title as
+/// `base64:<payload>`. Encoding unconditionally also keeps non-ASCII titles out
+/// of HTTP's restricted header-value character set.
+pub fn profile_title_header(user: &User) -> String {
+    let title: String = profile_title(user).chars().take(25).collect();
+    format!("base64:{}", STANDARD.encode(title))
+}
+
+pub fn profile_title(user: &User) -> &str {
+    user.subscription_title
+        .as_deref()
+        .filter(|title| !title.trim().is_empty())
+        .unwrap_or(&user.username)
+}
+
 fn link(
     endpoint: &SubscriptionEndpoint,
     uri: Option<String>,
@@ -507,7 +532,7 @@ fn link(
     EndpointLink {
         inbound_id: endpoint.inbound_id,
         node: endpoint.node_name.clone(),
-        tag: endpoint.tag.clone(),
+        tag: client_label_from_endpoint(endpoint),
         protocol: endpoint.kind.clone(),
         core: endpoint.core.clone(),
         address: endpoint.address.clone(),
@@ -784,7 +809,7 @@ pub(crate) fn singbox_outbound(
     password: &str,
     endpoint: &SubscriptionEndpoint,
 ) -> Result<Json> {
-    let tag = format!("{}-{}", endpoint.node_name, endpoint.tag);
+    let tag = client_label_from_endpoint(endpoint);
     let server = connect_host(endpoint);
     let mut outbound = match endpoint.kind.as_str() {
         "vless" => json!({
@@ -937,9 +962,56 @@ fn set_label(url: &mut Url, user: &User, endpoint: &SubscriptionEndpoint) {
 }
 
 fn label(user: &User, endpoint: &SubscriptionEndpoint) -> String {
-    format!(
+    let title = client_label(user, endpoint);
+    match happ_value(endpoint, "description") {
+        Some(description) => format!(
+            "{title}?serverDescription={}",
+            STANDARD.encode(description.as_bytes())
+        ),
+        None => title,
+    }
+}
+
+fn client_label(user: &User, endpoint: &SubscriptionEndpoint) -> String {
+    let fallback = format!(
         "{} @ {} / {}",
         user.username, endpoint.node_name, endpoint.tag
+    );
+    client_label_with_fallback(endpoint, &fallback)
+}
+
+fn client_label_from_endpoint(endpoint: &SubscriptionEndpoint) -> String {
+    let fallback = format!("{}-{}", endpoint.node_name, endpoint.tag);
+    client_label_with_fallback(endpoint, &fallback)
+}
+
+fn client_label_with_fallback(endpoint: &SubscriptionEndpoint, fallback: &str) -> String {
+    let name = happ_value(endpoint, "name").unwrap_or(fallback);
+    match happ_value(endpoint, "country_code").and_then(country_flag) {
+        Some(flag) => format!("{flag} {name}"),
+        None => name.to_string(),
+    }
+}
+
+fn happ_value<'a>(endpoint: &'a SubscriptionEndpoint, key: &str) -> Option<&'a str> {
+    endpoint
+        .extra
+        .get("happ")
+        .and_then(|value| value.get(key))
+        .and_then(Json::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+}
+
+fn country_flag(code: &str) -> Option<String> {
+    let code = code.trim().to_ascii_uppercase();
+    if code.len() != 2 || !code.bytes().all(|byte| byte.is_ascii_alphabetic()) {
+        return None;
+    }
+    Some(
+        code.bytes()
+            .filter_map(|byte| char::from_u32(0x1F1E6 + u32::from(byte - b'A')))
+            .collect(),
     )
 }
 
@@ -952,6 +1024,7 @@ mod tests {
         User {
             id: Uuid::new_v4(),
             username: "alice".into(),
+            subscription_title: None,
             labels: vec![],
             uuid: Uuid::new_v4().to_string(),
             password: "secret".into(),
@@ -1076,6 +1149,26 @@ mod tests {
         let outbound = outbound_by_tag(&config, "ams-1-vless-in");
         assert_eq!(outbound["type"], "vless");
         assert_eq!(outbound["tls"]["reality"]["public_key"], "public-key");
+    }
+
+    #[test]
+    fn emits_happ_title_flag_name_and_description() {
+        let mut user = user();
+        user.subscription_title = Some("Мой VPN".into());
+        let mut endpoint = endpoint();
+        endpoint.extra = json!({
+            "happ": {
+                "name": "Premium",
+                "country_code": "PL",
+                "description": "low latency"
+            }
+        });
+        let uri = endpoint_uri(&user, &endpoint).unwrap();
+        assert!(uri.contains("%F0%9F%87%B5%F0%9F%87%B1%20Premium"));
+        assert!(uri.contains("serverDescription=bG93IGxhdGVuY3k="));
+        assert_eq!(profile_title_header(&user), "base64:0JzQvtC5IFZQTg==");
+        let config = singbox_client_config(&user, &[endpoint], None);
+        assert_eq!(outbound_by_tag(&config, "🇵🇱 Premium")["tag"], "🇵🇱 Premium");
     }
 
     #[test]

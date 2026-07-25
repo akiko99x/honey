@@ -25,6 +25,7 @@ func realitySpec() core.Spec {
 				HandshakeServer: "www.cloudflare.com", HandshakePort: 443,
 			},
 		},
+		ExtraJSON: json.RawMessage(`{"happ":{"name":"Poland"}}`),
 	}}}
 }
 
@@ -57,6 +58,9 @@ func TestBuildRealityVLESSUsesCurrentXraySchema(t *testing.T) {
 		t.Fatalf("expected one VPN inbound, got %d", len(inbounds))
 	}
 	inbound := inbounds[0].(map[string]any)
+	if _, exists := inbound["happ"]; exists {
+		t.Fatalf("subscription-only metadata leaked into Xray config: %#v", inbound)
+	}
 	if inbound["protocol"] != "vless" {
 		t.Fatalf("unexpected protocol: %v", inbound["protocol"])
 	}

@@ -119,6 +119,9 @@ func buildInbound(in core.Inbound) (map[string]any, error) {
 		if err := json.Unmarshal(in.ExtraJSON, &extra); err != nil {
 			return nil, fmt.Errorf("inbound %q extra_json: %w", in.Tag, err)
 		}
+		// Used only while rendering client subscriptions; Xray rejects unknown
+		// top-level inbound fields.
+		delete(extra, "happ")
 		for k, v := range extra {
 			m[k] = v
 		}

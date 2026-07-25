@@ -1495,17 +1495,21 @@ pub async fn get_user_by_subscription_token(pool: &PgPool, token: Uuid) -> Resul
     )? {
         return Ok(Some(user));
     }
-    // multi-sub: a named extra subscription link resolves to the same user.
-    decrypt_opt_user(
-        sqlx::query_as(
-            "SELECT u.* FROM users u
-             JOIN user_subscriptions s ON s.user_id = u.id
-             WHERE s.token_hash = $1",
-        )
-        .bind(&token_hash)
-        .fetch_optional(pool)
-        .await?,
-    )
+    // Multi-sub: resolve the owning user and use the independently named link
+    // as the client-facing profile title.
+    let named: Option<(Uuid, String)> =
+        sqlx::query_as("SELECT user_id, name FROM user_subscriptions WHERE token_hash = $1")
+            .bind(&token_hash)
+            .fetch_optional(pool)
+            .await?;
+    let Some((user_id, name)) = named else {
+        return Ok(None);
+    };
+    let mut user = get_user(pool, user_id).await?;
+    if let Some(user) = user.as_mut() {
+        user.subscription_title = Some(name);
+    }
+    Ok(user)
 }
 
 // --- multi-subscription profiles -------------------------------------------
@@ -1611,8 +1615,9 @@ pub async fn create_user(
     let mut tx = pool.begin().await?;
     let row: User = sqlx::query_as(
         "INSERT INTO users
-           (username, uuid, password, subscription_token_hash, subscription_token_enc, traffic_limit_bytes, expires_at, created_by, device_limit)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *",
+           (username, uuid, password, subscription_token_hash, subscription_token_enc,
+            traffic_limit_bytes, expires_at, created_by, device_limit, subscription_title)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING *",
     )
     .bind(user.username)
     .bind(uuid)
@@ -1623,6 +1628,7 @@ pub async fn create_user(
     .bind(user.expires_at)
     .bind(created_by)
     .bind(user.device_limit.max(0))
+    .bind(user.subscription_title)
     .fetch_one(&mut *tx)
     .await?;
     // owner/admin-created users join the default group (their old universal-ish
@@ -1644,6 +1650,7 @@ pub async fn create_user(
 
 pub async fn update_user(pool: &PgPool, id: Uuid, user: UpdateUser) -> Result<Option<User>> {
     let (expires_set, expires_at) = patch_parts(user.expires_at);
+    let (title_set, subscription_title) = patch_parts(user.subscription_title);
     let password = user.password.as_deref().map(secret::encrypt).transpose()?;
     decrypt_opt_user(
         sqlx::query_as(
@@ -1651,7 +1658,8 @@ pub async fn update_user(pool: &PgPool, id: Uuid, user: UpdateUser) -> Result<Op
            enabled = COALESCE($4, enabled),
            traffic_limit_bytes = COALESCE($5, traffic_limit_bytes),
            expires_at = CASE WHEN $6 THEN $7 ELSE expires_at END,
-           device_limit = COALESCE($8, device_limit)
+           device_limit = COALESCE($8, device_limit),
+           subscription_title = CASE WHEN $9 THEN $10 ELSE subscription_title END
          WHERE id = $1 RETURNING *",
         )
         .bind(id)
@@ -1662,6 +1670,8 @@ pub async fn update_user(pool: &PgPool, id: Uuid, user: UpdateUser) -> Result<Op
         .bind(expires_set)
         .bind(expires_at)
         .bind(user.device_limit.map(|v| v.max(0)))
+        .bind(title_set)
+        .bind(subscription_title)
         .fetch_optional(pool)
         .await?,
     )

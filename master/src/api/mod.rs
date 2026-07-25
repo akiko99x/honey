@@ -2819,6 +2819,7 @@ async fn import_users(
         let new = NewUser {
             username: name.clone(),
             password,
+            subscription_title: None,
             traffic_limit_bytes: u.traffic_limit_bytes.or(u.data_limit).unwrap_or(0).max(0),
             expires_at,
             device_limit: 0,
@@ -6277,8 +6278,8 @@ async fn create_user_subscription(
 ) -> Result<Json<JsonValue>, ApiError> {
     owned_user(&st, &identity, id).await?;
     let name = input.name.trim();
-    if name.is_empty() || name.len() > 40 {
-        return Err(ApiError::bad_request("name is required (max 40 chars)"));
+    if name.is_empty() || name.chars().count() > 25 {
+        return Err(ApiError::bad_request("name is required (max 25 chars)"));
     }
     let (sub, token) = repo::create_user_subscription(&st.pool, id, name).await?;
     audit(
@@ -6633,9 +6634,9 @@ async fn subscription_wg_qr(
     Ok((headers, svg))
 }
 
-/// headers every subscription response carries: plain text + userinfo + a
-/// refresh hint the clients honour.
-fn sub_headers(user: &User) -> [(header::HeaderName, String); 3] {
+/// Headers every subscription response carries: title, quota and refresh hint.
+/// Happ otherwise falls back to displaying the subscription URL hostname.
+fn sub_headers(user: &User) -> [(header::HeaderName, String); 4] {
     [
         (
             header::CONTENT_TYPE,
@@ -6648,6 +6649,10 @@ fn sub_headers(user: &User) -> [(header::HeaderName, String); 3] {
         (
             header::HeaderName::from_static("profile-update-interval"),
             "12".to_string(),
+        ),
+        (
+            header::HeaderName::from_static("profile-title"),
+            subscription::profile_title_header(user),
         ),
     ]
 }
@@ -6797,6 +6802,9 @@ async fn tailored_response(
         header::HeaderName::from_static("profile-update-interval"),
         HeaderValue::from_static("12"),
     );
+    if let Ok(v) = HeaderValue::from_str(&subscription::profile_title_header(user)) {
+        headers.insert(header::HeaderName::from_static("profile-title"), v);
+    }
     headers.insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
     Ok(response)
 }
@@ -7451,6 +7459,60 @@ fn validate_inbound_basics(
     if !extra.is_object() {
         return Err(ApiError::bad_request("extra must be a JSON object"));
     }
+    if let Some(happ) = extra.get("happ") {
+        let happ = happ
+            .as_object()
+            .ok_or_else(|| ApiError::bad_request("extra.happ must be an object"))?;
+        for (key, max) in [("name", 80usize), ("description", 30usize)] {
+            if let Some(value) = happ.get(key) {
+                let value = value.as_str().ok_or_else(|| {
+                    ApiError::bad_request(format!("extra.happ.{key} must be text"))
+                })?;
+                if value.trim().chars().count() > max {
+                    return Err(ApiError::bad_request(format!(
+                        "extra.happ.{key} must not exceed {max} characters"
+                    )));
+                }
+            }
+        }
+        if let Some(code) = happ.get("country_code") {
+            let code = code
+                .as_str()
+                .ok_or_else(|| ApiError::bad_request("extra.happ.country_code must be text"))?;
+            if !code.is_empty()
+                && (code.len() != 2 || !code.bytes().all(|byte| byte.is_ascii_alphabetic()))
+            {
+                return Err(ApiError::bad_request(
+                    "extra.happ.country_code must be a two-letter ISO code",
+                ));
+            }
+        }
+    }
+    if let Some(acme) = extra.get("acme").and_then(JsonValue::as_object) {
+        if let Some(port) = acme.get("alternative_http_port") {
+            let port = port.as_u64().ok_or_else(|| {
+                ApiError::bad_request("extra.acme.alternative_http_port must be a port")
+            })?;
+            if !(1..=65_535).contains(&port) {
+                return Err(ApiError::bad_request(
+                    "extra.acme.alternative_http_port must be between 1 and 65535",
+                ));
+            }
+        }
+        let http_disabled = acme
+            .get("disable_http_challenge")
+            .and_then(JsonValue::as_bool)
+            .unwrap_or(false);
+        let tls_disabled = acme
+            .get("disable_tls_alpn_challenge")
+            .and_then(JsonValue::as_bool)
+            .unwrap_or(false);
+        if http_disabled && tls_disabled && acme.get("dns01_challenge").is_none() {
+            return Err(ApiError::bad_request(
+                "ACME cannot disable both HTTP-01 and TLS-ALPN-01 without DNS-01",
+            ));
+        }
+    }
     Ok(())
 }
 fn validate_user(input: &NewUser) -> Result<(), ApiError> {
@@ -7464,6 +7526,7 @@ fn validate_user(input: &NewUser) -> Result<(), ApiError> {
             "traffic_limit_bytes must not be negative",
         ));
     }
+    validate_subscription_title(input.subscription_title.as_deref())?;
     Ok(())
 }
 fn validate_update_user(input: &UpdateUser) -> Result<(), ApiError> {
@@ -7481,6 +7544,21 @@ fn validate_update_user(input: &UpdateUser) -> Result<(), ApiError> {
         return Err(ApiError::bad_request(
             "traffic_limit_bytes must not be negative",
         ));
+    }
+    if let Patch::Value(title) = &input.subscription_title {
+        validate_subscription_title(Some(title))?;
+    }
+    Ok(())
+}
+
+fn validate_subscription_title(title: Option<&str>) -> Result<(), ApiError> {
+    if let Some(title) = title {
+        let length = title.trim().chars().count();
+        if !(1..=25).contains(&length) {
+            return Err(ApiError::bad_request(
+                "subscription_title must contain 1 to 25 characters",
+            ));
+        }
     }
     Ok(())
 }
@@ -7612,6 +7690,7 @@ mod tests {
         let user = NewUser {
             username: "alice".into(),
             password: "secret".into(),
+            subscription_title: None,
             traffic_limit_bytes: -1,
             expires_at: None,
             device_limit: 0,

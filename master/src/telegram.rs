@@ -143,6 +143,7 @@ fn blank_update() -> UpdateUser {
     UpdateUser {
         username: None,
         password: None,
+        subscription_title: Patch::Missing,
         enabled: None,
         traffic_limit_bytes: None,
         expires_at: Patch::Missing,
@@ -197,6 +198,7 @@ async fn add_user_reply(
     let new = NewUser {
         username: username.to_string(),
         password,
+        subscription_title: None,
         traffic_limit_bytes: (gb.max(0.0) * GB) as i64,
         expires_at,
         device_limit: 0,

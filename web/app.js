@@ -930,6 +930,7 @@
         <div class="panel"><div class="panel-title">Subscription</div><div class="prop-list">
           ${prop("State", `<span class="status ${user.active ? "ok" : "bad"}">${user.active ? "available" : "unavailable"}</span>`)}
           ${prop("Token", "stored, encrypted at rest")}
+          ${prop("Client title", esc(user.subscription_title || user.username))}
           ${prop("Short alias", alias ? `<span class="mono">${esc(alias)}</span>` : "—")}
           ${alias ? prop("Universal link", `<span class="mono">${esc(uni)}</span> <button class="row-button" data-copy="${esc(uni)}">copy</button>`) : ""}
           ${prop("Suppression", esc(user.suppressed_reason || "none"))}
@@ -997,7 +998,7 @@
       : `<p class="form-note">No named links yet. Each named link is a separate, independently revocable token for the same user config — one per device (work laptop, phone, home router).</p>`;
     showList("Named subscription links", `<div class="form-body">
       <div class="check-list">${rows}</div>
-      <div class="form-row" style="margin-top:12px"><label style="flex:1"><span>New link name</span><input id="named-sub-input" placeholder="phone" autocomplete="off" spellcheck="false" maxlength="40"></label></div>
+      <div class="form-row" style="margin-top:12px"><label style="flex:1"><span>New link name</span><input id="named-sub-input" placeholder="phone" autocomplete="off" spellcheck="false" maxlength="25"></label></div>
       <button class="button primary" data-action="create-named-sub" data-id="${id}">Create link</button>
       <p class="field-error" id="named-sub-err"></p>
       <p class="form-note">Revoking a named link invalidates only that token; other links and the primary subscription keep working.</p>
@@ -2366,8 +2367,9 @@
     return {
       core: state.settings?.default_inbound_core || "singbox", kind: "vless", node_id: state.nodes[0]?.id || "",
       tag: "", port: "", flow: "xtls-rprx-vision",
+      happ_name: "", happ_description: "", country_code: "",
       security: "reality", network: "tcp", transport_path: "", transport_service_name: "", transport_host: "",
-      cert_source: "acme", acme_email: "",
+      cert_source: "acme", acme_email: "", acme_challenge: "http", acme_http_port: "9080",
       server_name: "www.cloudflare.com", cert_path: "", key_path: "",
       reality_handshake_server: "www.cloudflare.com", reality_handshake_port: "443",
       reality_short_ids: "", reality_private_key: "", reality_public_key: "",
@@ -2385,9 +2387,14 @@
       editing_id: ib.id, _orig: ib,
       core: ib.core, kind: ib.kind, node_id: ib.node_id,
       tag: ib.tag || "", port: String(ib.listen_port || ""), flow: ib.flow || "xtls-rprx-vision",
+      happ_name: ib.extra?.happ?.name || "",
+      happ_description: ib.extra?.happ?.description || "",
+      country_code: ib.extra?.happ?.country_code || "",
       security, network: ib.network || "tcp",
       transport_path: ib.transport_path || "", transport_service_name: ib.transport_service_name || "", transport_host: ib.transport_host || "",
       cert_source: acme ? "acme" : "manual", acme_email: (acme && ib.extra.acme.email) || "",
+      acme_challenge: acme && ib.extra.acme.disable_http_challenge ? "tls-alpn" : "http",
+      acme_http_port: (acme && ib.extra.acme.alternative_http_port) || "9080",
       server_name: ib.server_name || "www.cloudflare.com", cert_path: ib.cert_path || "", key_path: ib.key_path || "",
       reality_handshake_server: ib.reality_handshake_server || "www.cloudflare.com", reality_handshake_port: String(ib.reality_handshake_port || "443"),
       reality_short_ids: (ib.reality_short_ids || []).join(","), reality_private_key: "", reality_public_key: ib.reality_public_key || "",
@@ -2481,6 +2488,9 @@
       <div class="panel wiz-panel"><div class="panel-title">2 · Protocol &amp; placement</div><div class="form-body">
         <div class="form-row"><label><span>Protocol</span><select data-wiz="kind" data-struct>${protos.map((p) => option(p, p, w.kind)).join("")}</select></label><label><span>Node</span><select data-wiz="node_id">${state.nodes.map((n) => option(n.id, n.name, w.node_id)).join("")}</select></label></div>
         <div class="form-row"><label><span>Tag</span><input data-wiz="tag" value="${esc(w.tag)}" placeholder="vless-in"></label><label><span>Port</span><input data-wiz="port" type="number" min="1" max="65535" value="${esc(w.port)}" placeholder="443"></label></div>
+        <div class="section-label">CLIENT DISPLAY (HAPP AND OTHER APPS)</div>
+        <div class="form-row"><label>${helpLabel("Config name", "The server name shown in Happ instead of the technical user @ node / tag label. Empty keeps the legacy generated name.")}<input data-wiz="happ_name" maxlength="80" value="${esc(w.happ_name)}" placeholder="Poland · Premium"></label><label>${helpLabel("Country code", "Two-letter ISO country code. Honey turns PL into the 🇵🇱 flag prefix in every generated client config.")}<input data-wiz="country_code" maxlength="2" value="${esc(w.country_code)}" placeholder="PL" autocomplete="off"></label></div>
+        <label>${helpLabel("Config description", "Optional Happ subtitle shown below this config name. Happ limits it to 30 characters.")}<input data-wiz="happ_description" maxlength="30" value="${esc(w.happ_description)}" placeholder="VLESS · low latency"></label>
         ${w.kind === "vless" ? `<label><span>Flow</span><input data-wiz="flow" value="${esc(w.flow)}" placeholder="xtls-rprx-vision"></label>` : ""}
         ${w.kind === "hysteria2" ? `<label>${helpLabel("UDP port hopping (optional)", "A comma-separated list or range of UDP ports advertised to compatible clients. Every selected port must reach this node and be forwarded to the inbound listener.")}<input data-wiz="hop_ports" value="${esc(w.hop_ports)}" placeholder="20000-30000"></label>` : ""}
         ${w.kind === "hysteria2" ? `<div class="form-row"><label>${helpLabel("Down speed cap, Mbps", "Traffic shaping: caps download bandwidth for this hysteria2 inbound (drives its congestion control). 0 = unlimited. Use tiered inbounds as speed plans — vless/vmess/trojan cores have no per-inbound speed limiter.")}<input data-wiz="down_mbps" type="number" min="0" max="100000" value="${esc(w.down_mbps)}" placeholder="0"></label><label>${helpLabel("Up speed cap, Mbps", "Caps upload bandwidth for this hysteria2 inbound. 0 = unlimited.")}<input data-wiz="up_mbps" type="number" min="0" max="100000" value="${esc(w.up_mbps)}" placeholder="0"></label></div>` : ""}
@@ -2521,7 +2531,10 @@
         ? `<span class="chip">manual paths (xray)</span>`
         : `<div class="seg" style="margin-top:2px">${["acme", "manual"].map((s) => `<button type="button" class="seg-btn ${src === s ? "on" : ""}" data-wiz-set="cert_source" data-val="${s}">${s === "acme" ? "automatic (ACME)" : "manual paths"}</button>`).join("")}</div>`;
       const body = src === "acme"
-        ? `<div class="form-row"><label><span>ACME email</span><input data-wiz="acme_email" value="${esc(w.acme_email)}" placeholder="you@example.com"></label><label><span>&nbsp;</span><span class="form-note" style="padding-top:9px">sing-box obtains &amp; auto-renews via Let's Encrypt (HTTP-01 on :80).</span></label></div>`
+        ? `<div class="form-row"><label><span>ACME email</span><input data-wiz="acme_email" value="${esc(w.acme_email)}" placeholder="you@example.com"></label><label><span>Challenge</span><select data-wiz="acme_challenge" data-struct>${option("http", "HTTP-01", w.acme_challenge || "http")}${option("tls-alpn", "TLS-ALPN-01", w.acme_challenge || "http")}</select></label></div>
+          ${(w.acme_challenge || "http") === "http"
+            ? `<label>${helpLabel("Alternate local HTTP port (optional)", "Normally Let's Encrypt connects to public TCP :80 and sing-box listens there directly. Set a high local port only when a reverse proxy forwards /.well-known/acme-challenge/ from public :80 to this port.")}<input data-wiz="acme_http_port" type="number" min="1" max="65535" value="${esc(w.acme_http_port)}" placeholder="empty = :80"></label><p class="form-note">HTTP-01 needs public TCP :80 to reach this node. If Caddy already owns :80, configure challenge forwarding and set its local target port here.</p>`
+            : `<p class="form-note">TLS-ALPN-01 needs public TCP :443 to reach sing-box. Use it only when Caddy or another inbound does not already own that port.</p>`}`
         : `<div class="form-row"><label><span>Certificate path</span><input data-wiz="cert_path" value="${esc(w.cert_path)}" placeholder="/etc/letsencrypt/live/…/fullchain.pem"></label><label><span>Key path</span><input data-wiz="key_path" value="${esc(w.key_path)}" placeholder="/…/privkey.pem"></label></div>`;
       return `<div class="form-row"><label>${helpLabel("Server name (SNI / domain)", "The TLS name sent by clients. It must be covered by the configured certificate and resolve through the public path you intend clients to use.")}<input data-wiz="server_name" list="wiz-domains" value="${esc(w.server_name)}" placeholder="vpn.example.com"></label><label><span>Certificate source</span>${srcSeg}</label></div>
         ${body}`;
@@ -2601,7 +2614,21 @@
         // on edit preserve unmanaged extra keys (custom JSON, utls, etc.); the
         // wizard only owns acme and hop_ports.
         const ex = w.editing_id && w._orig && w._orig.extra ? { ...w._orig.extra } : {};
-        if (acme) ex.acme = { email: (w.acme_email || "").trim() }; else delete ex.acme;
+        if (acme) {
+          ex.acme = { email: (w.acme_email || "").trim() };
+          if ((w.acme_challenge || "http") === "http") {
+            ex.acme.disable_tls_alpn_challenge = true;
+            if (Number(w.acme_http_port || 0) > 0) ex.acme.alternative_http_port = Number(w.acme_http_port);
+          } else {
+            ex.acme.disable_http_challenge = true;
+          }
+        } else delete ex.acme;
+        const happ = {
+          name: (w.happ_name || "").trim(),
+          description: (w.happ_description || "").trim(),
+          country_code: (w.country_code || "").trim().toUpperCase(),
+        };
+        if (happ.name || happ.description || happ.country_code) ex.happ = happ; else delete ex.happ;
         if (w.kind === "hysteria2" && (w.hop_ports || "").trim()) ex.hop_ports = (w.hop_ports || "").trim(); else delete ex.hop_ports;
         if (w.kind === "shadowsocks") {
           if ((w.ss_method || "").trim()) ex.method = w.ss_method.trim(); else delete ex.method;
@@ -2621,7 +2648,8 @@
     if (!body.listen_port) { if (err) err.textContent = "Port is required."; return; }
     if (reality && !body.reality_public_key) { if (err) err.textContent = "Generate REALITY keys first."; return; }
     if (acme && !body.server_name) { if (err) err.textContent = "A domain (server name) is required for ACME."; return; }
-    if (acme && !body.extra.acme.email) { if (err) err.textContent = "An ACME email is required."; return; }
+      if (acme && !body.extra.acme.email) { if (err) err.textContent = "An ACME email is required."; return; }
+      if (body.extra.happ?.country_code && !/^[A-Z]{2}$/.test(body.extra.happ.country_code)) { if (err) err.textContent = "Country code must be two letters (for example PL)."; return; }
     const editingId = w.editing_id;
     try {
       if (editingId) {
@@ -3025,6 +3053,7 @@
       <p class="form-note">Extra public addresses become additional failover targets per inbound in subscriptions.</p><p class="field-error"></p>`;
     if (kind === "user") return `
       <label><span>Username</span><input name="username" value="${esc(entity?.username || "")}" required placeholder="alice" autocomplete="off"></label>
+      <label>${helpLabel("Subscription title", "The profile name shown by Happ and other subscription clients. Empty falls back to the username; maximum 25 characters.")}<input name="subscription_title" maxlength="25" value="${esc(entity?.subscription_title || "")}" placeholder="Prism VPN" autocomplete="off"></label>
       ${editing ? "" : '<label><span>Password</span><input name="password" type="password" required placeholder="strong password" autocomplete="new-password"></label>'}
       <div class="form-row"><label><span>Traffic limit, GB</span><input name="traffic_limit_gb" type="number" min="0" step=".01" value="${entity ? Number(entity.traffic_limit_bytes || 0) / 1024 ** 3 : 0}"></label><label><span>Expires in, days</span><input name="expires_days" type="number" min="0" step="1" inputmode="numeric" value="${expiryDays(entity?.expires_at)}" required></label></div>
       <div class="form-row"><label>${helpLabel("Device limit", "Max distinct concurrent source IPs (a 'device' = a source address; no first-party client for real HWID). 0 = unlimited. Over the limit raises a Traffic/Device alert; enforcement (closing the newest connections) is a runtime setting.")}<input name="device_limit" type="number" min="0" step="1" inputmode="numeric" value="${Number(entity?.device_limit || 0)}"></label>${editing ? `<label><span>Enabled</span><select name="enabled">${option("true","on",String(entity.enabled))}${option("false","off",String(entity.enabled))}</select></label>` : "<label><span>&nbsp;</span><span class=\"form-note\" style=\"padding-top:9px\">anti-sharing cap</span></label>"}</div>
@@ -3119,6 +3148,7 @@
       }
       body = {
         username: data.username.trim(),
+        subscription_title: data.subscription_title.trim() || null,
         traffic_limit_bytes: Math.round(Number(data.traffic_limit_gb || 0) * 1024 ** 3),
         expires_at: expiresDays === 0 ? null : new Date(Date.now() + expiresDays * 86_400_000).toISOString(),
         device_limit: Math.max(0, Math.round(Number(data.device_limit || 0)))

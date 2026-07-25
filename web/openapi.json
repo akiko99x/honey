@@ -1641,10 +1641,15 @@
                                                                                   "type":  "string",
                                                                                   "format":  "uuid"
                                                                               },
-                                                                       "username":  {
-                                                                                        "type":  "string"
-                                                                                    },
-                                                                       "enabled":  {
+                                                                        "username":  {
+                                                                                         "type":  "string"
+                                                                                     },
+                                                                       "subscription_title":  {
+                                                                                                  "type":  "string",
+                                                                                                  "nullable":  true,
+                                                                                                  "maxLength":  25
+                                                                                              },
+                                                                        "enabled":  {
                                                                                        "type":  "boolean"
                                                                                    },
                                                                        "traffic_limit_bytes":  {
@@ -1673,10 +1678,15 @@
                                                                         "username"
                                                                     ],
                                                        "properties":  {
-                                                                          "username":  {
-                                                                                           "type":  "string"
-                                                                                       },
-                                                                          "password":  {
+                                                                           "username":  {
+                                                                                            "type":  "string"
+                                                                                        },
+                                                                           "subscription_title":  {
+                                                                                                       "type":  "string",
+                                                                                                       "nullable":  true,
+                                                                                                       "maxLength":  25
+                                                                                                   },
+                                                                           "password":  {
                                                                                            "type":  "string",
                                                                                            "writeOnly":  true
                                                                                        },

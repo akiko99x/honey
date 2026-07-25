@@ -280,6 +280,16 @@ install -d -o caddy -g caddy -m 0750 /etc/caddy
 	if [[ -n "$caddy_email" ]]; then
 		printf '%s\n' "{ email $caddy_email }"
 	fi
+	cat <<'CADDY_HTTP'
+http:// {
+	handle /.well-known/acme-challenge/* {
+		reverse_proxy 127.0.0.1:9080
+	}
+	handle {
+		redir https://{host}{uri} permanent
+	}
+}
+CADDY_HTTP
 	printf '%s {\n' "$panel_domain"
 	printf '    reverse_proxy 127.0.0.1:8080\n'
 	printf '}\n'

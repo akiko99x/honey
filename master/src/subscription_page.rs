@@ -89,8 +89,14 @@ pub fn render(user: &User, token: Uuid, links: &[EndpointLink]) -> String {
     let base = format!("/sub/{token}");
 
     TEMPLATE
-        .replace("{{TITLE}}", &escape(&user.username))
-        .replace("{{USERNAME}}", &escape(&user.username))
+        .replace(
+            "{{TITLE}}",
+            &escape(crate::subscription::profile_title(user)),
+        )
+        .replace(
+            "{{USERNAME}}",
+            &escape(crate::subscription::profile_title(user)),
+        )
         .replace("{{STATUS_CLASS}}", status_class)
         .replace("{{STATUS}}", &escape(status))
         .replace("{{METRICS}}", &metrics)

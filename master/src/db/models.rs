@@ -751,6 +751,10 @@ pub struct FleetHealthSummary {
 pub struct User {
     pub id: Uuid,
     pub username: String,
+    /// Client-facing profile title. Named subscription links override this
+    /// value with their own name while they are being resolved.
+    #[serde(default)]
+    pub subscription_title: Option<String>,
     #[serde(default)]
     pub labels: Vec<String>,
     // vless/vmess credential; stored encrypted at rest (text), plaintext in memory.
@@ -1137,6 +1141,8 @@ pub struct NewUser {
     pub username: String,
     pub password: String,
     #[serde(default)]
+    pub subscription_title: Option<String>,
+    #[serde(default)]
     pub traffic_limit_bytes: i64,
     #[serde(default)]
     pub expires_at: Option<DateTime<Utc>>,
@@ -1148,6 +1154,8 @@ pub struct NewUser {
 pub struct UpdateUser {
     pub username: Option<String>,
     pub password: Option<String>,
+    #[serde(default)]
+    pub subscription_title: Patch<String>,
     pub enabled: Option<bool>,
     pub traffic_limit_bytes: Option<i64>,
     #[serde(default)]

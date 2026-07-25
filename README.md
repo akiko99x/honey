@@ -96,6 +96,15 @@ Put a reverse proxy in front for TLS (proxy the **whole** host — the panel, th
 protected API and public `/sub/...` links share the origin):
 
 ```caddyfile
+http:// {
+  handle /.well-known/acme-challenge/* {
+    reverse_proxy 127.0.0.1:9080
+  }
+  handle {
+    redir https://{host}{uri} permanent
+  }
+}
+
 panel.example.com {
   reverse_proxy 127.0.0.1:8080
 }
@@ -167,8 +176,12 @@ not a honey defect.
 - **Panel domain**: A/AAAA to the master; TLS via your reverse proxy or the
   `tls`/`acme` features.
 - **Node domains**: point at each node; used for inbound `server_name` and CDN
-  hostnames. sing-box TLS inbounds can use native ACME (HTTP-01 on port 80);
-  Xray TLS inbounds use provisioned `cert_path`/`key_path` files.
+  hostnames. sing-box TLS inbounds can use native ACME (HTTP-01 or TLS-ALPN-01).
+  The bootstrap Caddyfile forwards HTTP-01 from public `:80` to the writable
+  local challenge listener on `:9080`; direct-node installs can leave the
+  alternate port empty and expose `:80` themselves. ACME state is persisted
+  below `/etc/honey/sing-box/acme`. Xray TLS inbounds use provisioned
+  `cert_path`/`key_path` files.
 - **REALITY `dest`/SNI** remain free text. A compatible public donor is the
   conventional choice, but filtering can be route-specific. A domain you own
   that resolves to the node and terminates a compatible TLS 1.3 target is also

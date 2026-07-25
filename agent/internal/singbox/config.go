@@ -3,6 +3,7 @@ package singbox
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/akiko99x/honey/agent/internal/core"
 )
@@ -138,6 +139,9 @@ func buildInbound(in core.Inbound) (map[string]any, error) {
 				tlsMap["acme"] = acmeBlock(raw, in.TLS)
 			}
 		}
+		// Subscription presentation metadata belongs to the control plane and
+		// is not part of sing-box's inbound schema.
+		delete(extra, "happ")
 		for k, v := range extra {
 			m[k] = v
 		}
@@ -158,7 +162,38 @@ func acmeBlock(raw any, t *core.TLS) map[string]any {
 	if _, ok := block["domain"]; !ok && t != nil && t.ServerName != "" {
 		block["domain"] = []string{t.ServerName}
 	}
+	// honey-agent runs with ProtectSystem=strict. CertMagic's default data
+	// directory resolves below the service account's home and is not writable
+	// inside that sandbox, so issuance used to fail before completing a
+	// challenge. Keep account keys and renewed certificates in the directory
+	// explicitly writable by honey-agent.service.
+	if _, ok := block["data_directory"]; !ok {
+		domain := "default"
+		if t != nil && t.ServerName != "" {
+			domain = safePathPart(t.ServerName)
+		}
+		block["data_directory"] = "/etc/honey/sing-box/acme/" + domain
+	}
+	if _, ok := block["default_server_name"]; !ok && t != nil && t.ServerName != "" {
+		block["default_server_name"] = t.ServerName
+	}
 	return block
+}
+
+func safePathPart(value string) string {
+	var out strings.Builder
+	for _, r := range strings.ToLower(value) {
+		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') || r == '.' || r == '-' {
+			out.WriteRune(r)
+		} else {
+			out.WriteByte('-')
+		}
+	}
+	clean := strings.Trim(out.String(), ".-")
+	if clean == "" {
+		return "default"
+	}
+	return clean
 }
 
 func buildUsers(inboundType string, users []core.User) []map[string]any {
