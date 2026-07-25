@@ -1,3 +1,9 @@
+<p align="center">
+  <kbd>
+    <img src="./d38ce393-e78d-4fbe-86d9-cb813fdaa5e1.png" width="100%" alt="honey logo">
+  </kbd>
+</p>
+
 # honey
 
 Universal, multi-node VPN panel. A **master** orchestrates many **nodes**; each
