@@ -755,6 +755,9 @@ pub struct User {
     /// value with their own name while they are being resolved.
     #[serde(default)]
     pub subscription_title: Option<String>,
+    /// Client-facing subscription description/announcement.
+    #[serde(default)]
+    pub subscription_description: Option<String>,
     #[serde(default)]
     pub labels: Vec<String>,
     // vless/vmess credential; stored encrypted at rest (text), plaintext in memory.
@@ -1143,6 +1146,8 @@ pub struct NewUser {
     #[serde(default)]
     pub subscription_title: Option<String>,
     #[serde(default)]
+    pub subscription_description: Option<String>,
+    #[serde(default)]
     pub traffic_limit_bytes: i64,
     #[serde(default)]
     pub expires_at: Option<DateTime<Utc>>,
@@ -1156,6 +1161,8 @@ pub struct UpdateUser {
     pub password: Option<String>,
     #[serde(default)]
     pub subscription_title: Patch<String>,
+    #[serde(default)]
+    pub subscription_description: Patch<String>,
     pub enabled: Option<bool>,
     pub traffic_limit_bytes: Option<i64>,
     #[serde(default)]

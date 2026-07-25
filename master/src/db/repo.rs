@@ -1616,8 +1616,9 @@ pub async fn create_user(
     let row: User = sqlx::query_as(
         "INSERT INTO users
            (username, uuid, password, subscription_token_hash, subscription_token_enc,
-            traffic_limit_bytes, expires_at, created_by, device_limit, subscription_title)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING *",
+            traffic_limit_bytes, expires_at, created_by, device_limit, subscription_title,
+            subscription_description)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING *",
     )
     .bind(user.username)
     .bind(uuid)
@@ -1629,6 +1630,7 @@ pub async fn create_user(
     .bind(created_by)
     .bind(user.device_limit.max(0))
     .bind(user.subscription_title)
+    .bind(user.subscription_description)
     .fetch_one(&mut *tx)
     .await?;
     // owner/admin-created users join the default group (their old universal-ish
@@ -1651,6 +1653,7 @@ pub async fn create_user(
 pub async fn update_user(pool: &PgPool, id: Uuid, user: UpdateUser) -> Result<Option<User>> {
     let (expires_set, expires_at) = patch_parts(user.expires_at);
     let (title_set, subscription_title) = patch_parts(user.subscription_title);
+    let (description_set, subscription_description) = patch_parts(user.subscription_description);
     let password = user.password.as_deref().map(secret::encrypt).transpose()?;
     decrypt_opt_user(
         sqlx::query_as(
@@ -1660,6 +1663,7 @@ pub async fn update_user(pool: &PgPool, id: Uuid, user: UpdateUser) -> Result<Op
            expires_at = CASE WHEN $6 THEN $7 ELSE expires_at END,
            device_limit = COALESCE($8, device_limit),
            subscription_title = CASE WHEN $9 THEN $10 ELSE subscription_title END
+           ,subscription_description = CASE WHEN $11 THEN $12 ELSE subscription_description END
          WHERE id = $1 RETURNING *",
         )
         .bind(id)
@@ -1672,6 +1676,8 @@ pub async fn update_user(pool: &PgPool, id: Uuid, user: UpdateUser) -> Result<Op
         .bind(user.device_limit.map(|v| v.max(0)))
         .bind(title_set)
         .bind(subscription_title)
+        .bind(description_set)
+        .bind(subscription_description)
         .fetch_optional(pool)
         .await?,
     )

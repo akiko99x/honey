@@ -74,7 +74,7 @@
     env: "environment variable", file: "mounted file", vault: "HashiCorp Vault",
     command: "external command", none: "not configured",
   })[backend] || backend || "not configured";
-  const listRoutes = new Set(["overview", "issues", "nodes", "inbounds", "users", "groups", "traffic", "live", "subscriptions", "domains", "ssltls", "rules", "logs", "settings", "new-inbound", "new-node"]);
+  const listRoutes = new Set(["overview", "issues", "nodes", "inbounds", "users", "groups", "traffic", "live", "subscriptions", "domains", "ssltls", "rules", "logs", "settings", "new-inbound", "new-node", "new-user"]);
   const detailKinds = new Set(["nodes", "inbounds", "users"]);
   // Top-level sections expand in place, like Cloudflare's dashboard navigation.
   // Each child is a real, focused screen; Overview stays the workspace home.
@@ -97,6 +97,7 @@
     ],
     users: [
       { key: "directory", label: "Directory", view: "users" },
+      { key: "new", label: "Create users", view: "new-user" },
       { key: "access", label: "Access", view: "user-access" },
       { key: "quotas", label: "Quotas", view: "user-quotas" },
       { key: "lifecycle", label: "Lifecycle", view: "user-lifecycle" },
@@ -199,6 +200,7 @@
     nodes: [], users: [], inbounds: [], domains: [], profiles: [], groups: [], admins: [], nodeEdit: null,
     selection: { nodes: new Set(), users: new Set(), inbounds: new Set() },
     settings: null, branding: null, customRoles: [],
+    userWiz: null,
     issueReport: { counts: { total: 0, critical: 0, warning: 0, info: 0 }, issues: [] },
     issueFilters: { severity: "", kind: "", node: "" },
     savedViews: [],
@@ -659,7 +661,7 @@
       "tls-certificates": renderTlsCertificates, "tls-acme": renderTlsAcme, "tls-reality": renderTlsReality,
       "rule-coverage": renderRuleCoverage, "rule-delivery": renderRuleDelivery,
       "audit-page": renderAuditPage, "scheduled-page": renderScheduledPage,
-      "new-inbound": renderNewInbound, "new-node": renderNewNode,
+      "new-inbound": renderNewInbound, "new-node": renderNewNode, "new-user": renderNewUser,
     };
     updateMainNavState();
     updateSidebarScope();
@@ -2667,6 +2669,86 @@
     }
   }
 
+  function userWizDefaults(user = null) {
+    return {
+      editing_id: user?.id || "",
+      username: user?.username || "",
+      password: "",
+      subscription_title: user?.subscription_title || "",
+      subscription_description: user?.subscription_description || "",
+      traffic_gb: user ? Number(user.traffic_limit_bytes || 0) / 1024 ** 3 : 0,
+      expires_days: user ? expiryDays(user.expires_at) : 0,
+      device_limit: user?.device_limit || 0,
+      enabled: user?.enabled !== false,
+      bulk_prefix: "",
+      bulk_count: 1,
+    };
+  }
+
+  function renderNewUser() {
+    const w = state.userWiz || (state.userWiz = userWizDefaults());
+    const editing = Boolean(w.editing_id);
+    return `<div class="page narrow">${backLink("users", "Back to users")}
+      ${detailHead(editing ? "Edit user" : "Create user", "", editing ? "Update credentials and Happ metadata." : "Issue one user or a batch of generated credentials.", "")}
+      <div class="panel wiz-panel"><div class="form-body">
+        <label><span>Username</span><input id="uw-username" value="${esc(w.username)}" placeholder="alice" ${editing ? "" : "required"}></label>
+        ${editing ? "" : `<label><span>Password</span><div class="form-row"><input id="uw-password" type="text" value="${esc(w.password)}" placeholder="click Generate or type your own"><button class="button secondary" data-action="generate-wiz-password">Generate</button></div></label>`}
+        <div class="form-row"><label><span>Subscription title</span><input id="uw-title" maxlength="25" value="${esc(w.subscription_title)}" placeholder="global default"></label><label><span>Device limit</span><input id="uw-devices" type="number" min="0" value="${w.device_limit}"></label></div>
+        <label><span>Subscription description</span><textarea id="uw-description" maxlength="200" rows="3" placeholder="Traffic: {TRAFFIC_SPENT} · left: {DAYS_LEFT}">${esc(w.subscription_description)}</textarea></label>
+        <div class="form-row"><label><span>Traffic limit, GB</span><input id="uw-traffic" type="number" min="0" step=".01" value="${w.traffic_gb}"></label><label><span>Expires in, days</span><input id="uw-expires" type="number" min="0" step="1" value="${w.expires_days}"></label></div>
+        ${editing ? `<label><span>Enabled</span><select id="uw-enabled">${option("true","on",String(w.enabled))}${option("false","off",String(w.enabled))}</select></label>` : `
+        <div class="section-label">BULK CREATION</div>
+        <div class="form-row"><label><span>Prefix</span><input id="uw-prefix" value="${esc(w.bulk_prefix)}" placeholder="poland"></label><label><span>Count</span><input id="uw-count" type="number" min="1" max="100" value="${w.bulk_count}"></label></div>
+        <p class="form-note">When count is greater than one, users are generated as prefix-random suffix. Passwords are generated server-side and shown once after creation.</p>`}
+        <p class="field-error" id="uw-error"></p>
+      </div></div>
+      <div class="wiz-actions"><button class="button" data-route="users">Cancel</button><button class="button primary" data-action="save-user-wiz">${editing ? "Save user" : "Create user(s)"}</button></div>
+    </div>`;
+  }
+
+  function generateWizardPassword() {
+    const input = document.getElementById("uw-password");
+    if (!input) return;
+    const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%";
+    const bytes = new Uint8Array(20);
+    crypto.getRandomValues(bytes);
+    input.value = Array.from(bytes, (b) => alphabet[b % alphabet.length]).join("");
+  }
+
+  async function saveUserWizard() {
+    const w = state.userWiz || {};
+    const err = document.getElementById("uw-error");
+    const username = document.getElementById("uw-username")?.value.trim() || "";
+    const password = document.getElementById("uw-password")?.value || "";
+    const title = document.getElementById("uw-title")?.value.trim() || null;
+    const description = document.getElementById("uw-description")?.value.trim() || null;
+    const days = Number(document.getElementById("uw-expires")?.value || 0);
+    const traffic = Math.round(Number(document.getElementById("uw-traffic")?.value || 0) * 1024 ** 3);
+    const device = Math.max(0, Math.round(Number(document.getElementById("uw-devices")?.value || 0)));
+    if (!w.editing_id && !username && !(document.getElementById("uw-prefix")?.value.trim())) { err.textContent = "username or bulk prefix is required"; return; }
+    if (!Number.isInteger(days) || days < 0) { err.textContent = "expiry must be a whole number"; return; }
+    try {
+      if (w.editing_id) {
+        await api(`/users/${w.editing_id}`, { method: "PATCH", body: JSON.stringify({ username, subscription_title: title, subscription_description: description, traffic_limit_bytes: traffic, expires_at: days ? new Date(Date.now() + days * 86400000).toISOString() : null, device_limit: device, enabled: document.getElementById("uw-enabled").value === "true" }) });
+        toast("user saved");
+      } else {
+        const count = Math.max(1, Math.min(100, Number(document.getElementById("uw-count")?.value || 1)));
+        const prefix = document.getElementById("uw-prefix")?.value.trim() || username;
+        const rows = [];
+        for (let i = 0; i < count; i++) {
+          const suffix = count > 1 ? `-${Math.random().toString(36).slice(2, 8)}` : "";
+          const pass = count > 1 || !password ? (() => { generateWizardPassword(); return document.getElementById("uw-password").value; })() : password;
+          const result = await api("/users", { method: "POST", body: JSON.stringify({ username: `${prefix}${suffix}`, password: pass, subscription_title: title, subscription_description: description, traffic_limit_bytes: traffic, expires_at: days ? new Date(Date.now() + days * 86400000).toISOString() : null, device_limit: device }) });
+          rows.push([result.user?.username || `${prefix}${suffix}`, pass, location.origin + result.subscription_path]);
+        }
+        showResult("Users created", rows.map((r) => [`${r[0]} · password`, `${r[1]} · ${r[2]}`]));
+      }
+      state.userWiz = null;
+      await loadData({ quiet: true });
+      if (w.editing_id) go("users");
+    } catch (error) { if (err) err.textContent = error.message; }
+  }
+
   function renderNewNode() {
     const n = state.nodeEdit || null;
     const editing = Boolean(n);
@@ -3053,8 +3135,9 @@
       <p class="form-note">Extra public addresses become additional failover targets per inbound in subscriptions.</p><p class="field-error"></p>`;
     if (kind === "user") return `
       <label><span>Username</span><input name="username" value="${esc(entity?.username || "")}" required placeholder="alice" autocomplete="off"></label>
-      <label>${helpLabel("Subscription title", "The profile name shown by Happ and other subscription clients. Empty falls back to the username; maximum 25 characters.")}<input name="subscription_title" maxlength="25" value="${esc(entity?.subscription_title || "")}" placeholder="Prism VPN" autocomplete="off"></label>
-      ${editing ? "" : '<label><span>Password</span><input name="password" type="password" required placeholder="strong password" autocomplete="new-password"></label>'}
+      <label>${helpLabel("Subscription title", "The profile name shown by Happ and other subscription clients. Empty uses the global default; maximum 25 characters.")}<input name="subscription_title" maxlength="25" value="${esc(entity?.subscription_title || "")}" placeholder="custom title (optional)" autocomplete="off"></label>
+      <label>${helpLabel("Subscription description", "Happ announcement text. Supports {DAYS_ELAPSED}, {TRAFFIC_SPENT}, {DAYS_LEFT} and {USERNAME}; maximum 200 characters.")}<textarea name="subscription_description" maxlength="200" rows="3" placeholder="Traffic: {TRAFFIC_SPENT} · left: {DAYS_LEFT}">${esc(entity?.subscription_description || "")}</textarea></label>
+      ${editing ? "" : '<label><span>Password</span><div class="form-row"><input name="password" type="password" required placeholder="generated or custom" autocomplete="new-password"><button type="button" class="button secondary" data-action="generate-user-password">Generate</button></div></label>'}
       <div class="form-row"><label><span>Traffic limit, GB</span><input name="traffic_limit_gb" type="number" min="0" step=".01" value="${entity ? Number(entity.traffic_limit_bytes || 0) / 1024 ** 3 : 0}"></label><label><span>Expires in, days</span><input name="expires_days" type="number" min="0" step="1" inputmode="numeric" value="${expiryDays(entity?.expires_at)}" required></label></div>
       <div class="form-row"><label>${helpLabel("Device limit", "Max distinct concurrent source IPs (a 'device' = a source address; no first-party client for real HWID). 0 = unlimited. Over the limit raises a Traffic/Device alert; enforcement (closing the newest connections) is a runtime setting.")}<input name="device_limit" type="number" min="0" step="1" inputmode="numeric" value="${Number(entity?.device_limit || 0)}"></label>${editing ? `<label><span>Enabled</span><select name="enabled">${option("true","on",String(entity.enabled))}${option("false","off",String(entity.enabled))}</select></label>` : "<label><span>&nbsp;</span><span class=\"form-note\" style=\"padding-top:9px\">anti-sharing cap</span></label>"}</div>
       <p class="form-note">0 GB and 0 days mean unlimited. Device limit 0 = unlimited.</p><p class="field-error"></p>`;
@@ -3149,6 +3232,7 @@
       body = {
         username: data.username.trim(),
         subscription_title: data.subscription_title.trim() || null,
+        subscription_description: data.subscription_description.trim() || null,
         traffic_limit_bytes: Math.round(Number(data.traffic_limit_gb || 0) * 1024 ** 3),
         expires_at: expiresDays === 0 ? null : new Date(Date.now() + expiresDays * 86_400_000).toISOString(),
         device_limit: Math.max(0, Math.round(Number(data.device_limit || 0)))
@@ -3321,6 +3405,9 @@
         <div class="form-row"><label><span>Audit retention, rows</span><input id="set-audit" type="number" min="10" max="5000" value="${s.audit_retention}"></label><label><span>Runtime log lines</span><input id="set-log" type="number" min="10" max="5000" value="${s.runtime_log_limit}"></label></div>
          <div class="form-row"><label><span>Traffic history, days</span><input id="set-traffic-history" type="number" min="7" max="3650" value="${s.traffic_history_days || 180}"></label><span class="form-note">Hourly buckets are retained for this period.</span></div>
         <div class="section-label">PUBLIC SUBSCRIPTIONS</div>
+        <div class="form-row"><label><span>Global subscription title</span><input id="set-sub-title" maxlength="25" value="${esc(s.default_subscription_title || "")}" placeholder="VPN Elusion"></label><label><span>Telegram / support URL</span><input id="set-sub-support" value="${esc(s.subscription_support_url || "")}" placeholder="https://t.me/example"></label></div>
+        <label><span>Global subscription description</span><textarea id="set-sub-description" maxlength="200" rows="3" placeholder="Traffic: {TRAFFIC_SPENT} · left: {DAYS_LEFT}">${esc(s.default_subscription_description || "")}</textarea></label>
+        <p class="form-note">Per-user title and description override these defaults. Supported tags: {USERNAME}, {DAYS_ELAPSED}, {TRAFFIC_SPENT}, {DAYS_LEFT}. Happ receives Telegram as a support button.</p>
         <div class="form-row"><label><span>Guard</span><select id="set-sub-guard"><option value="true" ${s.subscription_guard_enabled ? "selected" : ""}>on</option><option value="false" ${!s.subscription_guard_enabled ? "selected" : ""}>off (diagnostic only)</option></select></label><label><span>Requests per window</span><input id="set-sub-max" type="number" min="10" max="10000" value="${s.subscription_guard_max_requests}"></label></div>
         <div class="form-row"><label><span>Window, s</span><input id="set-sub-window" type="number" min="10" max="3600" value="${s.subscription_guard_window_secs}"></label><label><span>Block, s</span><input id="set-sub-block" type="number" min="10" max="86400" value="${s.subscription_guard_block_secs}"></label></div>
         <div class="check-list"><div class="check-row"><span><b>Guard telemetry</b><small>${Number(s.subscription_guard_allowed_total || 0)} allowed · ${Number(s.subscription_guard_blocked_total || 0)} blocked since restart · ${Number(s.subscription_guard_recent_blocks || 0)} recent persisted blocks · ${Number(s.subscription_guard_active_buckets || 0)} active buckets</small></span></div></div>
@@ -3351,6 +3438,9 @@
       runtime_log_limit: Number(document.getElementById("set-log").value),
       traffic_history_days: Number(document.getElementById("set-traffic-history").value),
       default_inbound_core: document.getElementById("set-core").value,
+      default_subscription_title: document.getElementById("set-sub-title").value.trim(),
+      default_subscription_description: document.getElementById("set-sub-description").value.trim(),
+      subscription_support_url: document.getElementById("set-sub-support").value.trim(),
       subscription_guard_enabled: document.getElementById("set-sub-guard").value === "true",
       subscription_guard_max_requests: Number(document.getElementById("set-sub-max").value),
       subscription_guard_window_secs: Number(document.getElementById("set-sub-window").value),
@@ -3371,6 +3461,17 @@
       formDialog.close();
       toast("settings saved");
     } catch (error) { const el = document.getElementById("set-err"); if (el) el.textContent = error.message; }
+  }
+
+  function generateUserPassword() {
+    const input = document.querySelector('#form-body input[name="password"]');
+    if (!input) return;
+    const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%";
+    const bytes = new Uint8Array(20);
+    crypto.getRandomValues(bytes);
+    input.value = Array.from(bytes, (b) => alphabet[b % alphabet.length]).join("");
+    input.type = "text";
+    input.focus();
   }
 
   async function manageApiKeys() {
@@ -3817,6 +3918,7 @@
       if (action === "save-labels") return saveLabels(element.dataset.kind, element.dataset.id);
       if (action === "add-node") { state.nodeEdit = null; return go("new-node"); }
       if (action === "add-inbound") { state.wiz = wizDefaults(); return go("new-inbound"); }
+      if (action === "add-user") { state.userWiz = userWizDefaults(); return go("new-user"); }
       if (action?.startsWith("batch-")) return runBatch(action.slice(6), element?.dataset.resource);
       if (action?.startsWith("add-")) return openEntity(action.slice(4));
       if (action === "gen-reality") return genReality();
@@ -3824,6 +3926,8 @@
       if (action === "preset-cf-xhttp") return applyCdnPreset("xhttp");
       if (action === "create-inbound") return createInboundFromWiz();
       if (action === "create-node") return createNodeFromWiz();
+      if (action === "save-user-wiz") return saveUserWizard();
+      if (action === "generate-wiz-password") return generateWizardPassword();
       if (action === "refresh") return loadData();
       if (action === "traffic-range") { state.trafficAnalytics.range = element?.dataset.range || "24h"; state.trafficAnalytics.data = null; return loadTrafficAnalytics(); }
       if (action === "traffic-refresh") { state.trafficAnalytics.data = null; return loadTrafficAnalytics(); }
@@ -3939,6 +4043,7 @@
       if (action === "entity-history") return showVersions(element?.dataset.kind, id);
       if (action === "revert-version") return revertVersion(element?.dataset.kind, id, element?.dataset.version);
       if (action === "save-settings") return saveRuntimeSettings();
+      if (action === "generate-user-password") return generateUserPassword();
       if (action === "add-admin-acct") return adminForm(null);
       if (action === "edit-admin") return adminForm((state.admins || []).find((a) => a.id === element?.dataset.id));
       if (action === "save-admin") return saveAdmin(element?.dataset.id);
@@ -3977,7 +4082,7 @@
       const user = state.users.find((item) => item.id === id);
       const inbound = state.inbounds.find((item) => item.id === id);
       if (action === "edit-node") { state.nodeEdit = node; return go("new-node"); }
-      if (action === "edit-user") return openEntity("user", user);
+      if (action === "edit-user") { state.userWiz = userWizDefaults(user); return go("new-user"); }
       if (action === "edit-inbound") { state.wiz = wizFromInbound(inbound); return go("new-inbound"); }
       if (action === "verify-domain") return verifyDomain(id);
       if (action === "probe-inbound") return probeInbound(id);

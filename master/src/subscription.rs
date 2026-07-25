@@ -2,6 +2,7 @@
 use anyhow::{anyhow, Result};
 use base64::engine::general_purpose::{STANDARD, URL_SAFE_NO_PAD};
 use base64::Engine;
+use chrono::Utc;
 use serde::Serialize;
 use serde_json::{json, Value as Json};
 use url::Url;
@@ -524,6 +525,57 @@ pub fn profile_title(user: &User) -> &str {
         .unwrap_or(&user.username)
 }
 
+/// Happ's optional announcement metadata. The template is operator-controlled
+/// and may contain a few deliberately small, non-secret placeholders.
+pub fn announce_header(user: &User) -> Option<String> {
+    let template = user
+        .subscription_description
+        .as_deref()
+        .filter(|v| !v.trim().is_empty())?;
+    let elapsed = (Utc::now() - user.created_at).num_days().max(0);
+    let left = user
+        .expires_at
+        .map(|at| (at - Utc::now()).num_days().max(0).to_string())
+        .unwrap_or_else(|| "∞".to_string());
+    let spent = human_bytes(user.used_traffic_bytes.max(0));
+    let mut text = template.to_string();
+    for (key, value) in [
+        ("{USERNAME}", user.username.clone()),
+        ("{{USERNAME}}", user.username.clone()),
+        ("{DAYS_ELAPSED}", elapsed.to_string()),
+        ("{days_elapsed}", elapsed.to_string()),
+        ("{DAYS ELAPSED}", elapsed.to_string()),
+        ("{{DAYS_ELAPSED}}", elapsed.to_string()),
+        ("{TRAFFIC_SPENT}", spent.clone()),
+        ("{traffic_spent}", spent),
+        ("{TRAFFIC SPENT}", human_bytes(user.used_traffic_bytes.max(0))),
+        ("{{TRAFFIC_SPENT}}", human_bytes(user.used_traffic_bytes.max(0))),
+        ("{DAYS_LEFT}", left.clone()),
+        ("{days_left}", left.clone()),
+        ("{DAYS LEFT}", left.clone()),
+        ("{{DAYS_LEFT}}", left),
+    ] {
+        text = text.replace(key, &value);
+    }
+    let text: String = text.chars().take(200).collect();
+    (!text.trim().is_empty()).then(|| format!("base64:{}", STANDARD.encode(text)))
+}
+
+fn human_bytes(value: i64) -> String {
+    const UNITS: [&str; 5] = ["B", "GB", "TB", "PB", "EB"];
+    let mut n = value as f64;
+    let mut index = 0usize;
+    while n >= 1024.0 && index < UNITS.len() - 1 {
+        n /= 1024.0;
+        index += 1;
+    }
+    if index == 0 {
+        format!("{} {}", n as i64, UNITS[index])
+    } else {
+        format!("{n:.1} {}", UNITS[index])
+    }
+}
+
 fn link(
     endpoint: &SubscriptionEndpoint,
     uri: Option<String>,
@@ -1025,6 +1077,7 @@ mod tests {
             id: Uuid::new_v4(),
             username: "alice".into(),
             subscription_title: None,
+            subscription_description: None,
             labels: vec![],
             uuid: Uuid::new_v4().to_string(),
             password: "secret".into(),
@@ -1169,6 +1222,21 @@ mod tests {
         assert_eq!(profile_title_header(&user), "base64:0JzQvtC5IFZQTg==");
         let config = singbox_client_config(&user, &[endpoint], None);
         assert_eq!(outbound_by_tag(&config, "🇵🇱 Premium")["tag"], "🇵🇱 Premium");
+    }
+
+    #[test]
+    fn renders_subscription_announcement_tags() {
+        let mut user = user();
+        user.subscription_description =
+            Some("Hi {USERNAME}: used {TRAFFIC_SPENT}, left {DAYS_LEFT}".into());
+        let header = announce_header(&user).expect("announcement");
+        assert!(header.starts_with("base64:"));
+        let decoded = STANDARD
+            .decode(header.trim_start_matches("base64:"))
+            .unwrap();
+        let text = String::from_utf8(decoded).unwrap();
+        assert!(text.contains("Hi alice"));
+        assert!(text.contains("left ∞"));
     }
 
     #[test]

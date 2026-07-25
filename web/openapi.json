@@ -1649,6 +1649,11 @@
                                                                                                   "nullable":  true,
                                                                                                   "maxLength":  25
                                                                                               },
+                                                                       "subscription_description":  {
+                                                                                                  "type":  "string",
+                                                                                                  "nullable":  true,
+                                                                                                  "maxLength":  200
+                                                                                              },
                                                                         "enabled":  {
                                                                                        "type":  "boolean"
                                                                                    },
@@ -1682,10 +1687,15 @@
                                                                                             "type":  "string"
                                                                                         },
                                                                            "subscription_title":  {
-                                                                                                       "type":  "string",
-                                                                                                       "nullable":  true,
-                                                                                                       "maxLength":  25
-                                                                                                   },
+                                                                                                      "type":  "string",
+                                                                                                      "nullable":  true,
+                                                                                                      "maxLength":  25
+                                                                                                  },
+                                                                           "subscription_description":  {
+                                                                                                      "type":  "string",
+                                                                                                      "nullable":  true,
+                                                                                                      "maxLength":  200
+                                                                                                  },
                                                                            "password":  {
                                                                                            "type":  "string",
                                                                                            "writeOnly":  true

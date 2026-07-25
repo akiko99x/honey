@@ -2820,6 +2820,7 @@ async fn import_users(
             username: name.clone(),
             password,
             subscription_title: None,
+            subscription_description: None,
             traffic_limit_bytes: u.traffic_limit_bytes.or(u.data_limit).unwrap_or(0).max(0),
             expires_at,
             device_limit: 0,
@@ -3713,6 +3714,9 @@ struct SettingsView {
     runtime_log_limit: i64,
     traffic_history_days: i64,
     default_inbound_core: String,
+    default_subscription_title: String,
+    default_subscription_description: String,
+    subscription_support_url: String,
     subscription_guard_enabled: bool,
     subscription_guard_max_requests: u32,
     subscription_guard_window_secs: u64,
@@ -3761,6 +3765,18 @@ async fn get_settings(State(st): State<AppState>) -> Result<Json<SettingsView>, 
             .get("default_inbound_core")
             .cloned()
             .unwrap_or_else(|| DEFAULT_INBOUND_CORE.to_string()),
+        default_subscription_title: map
+            .get("default_subscription_title")
+            .cloned()
+            .unwrap_or_default(),
+        default_subscription_description: map
+            .get("default_subscription_description")
+            .cloned()
+            .unwrap_or_default(),
+        subscription_support_url: map
+            .get("subscription_support_url")
+            .cloned()
+            .unwrap_or_default(),
         subscription_guard_enabled: guard.enabled,
         subscription_guard_max_requests: guard.max_requests,
         subscription_guard_window_secs: guard.window.as_secs(),
@@ -3803,6 +3819,12 @@ struct UpdateSettings {
     traffic_history_days: Option<i64>,
     #[serde(default)]
     default_inbound_core: Option<String>,
+    #[serde(default)]
+    default_subscription_title: Option<String>,
+    #[serde(default)]
+    default_subscription_description: Option<String>,
+    #[serde(default)]
+    subscription_support_url: Option<String>,
     #[serde(default)]
     subscription_guard_enabled: Option<bool>,
     #[serde(default)]
@@ -3868,6 +3890,30 @@ async fn update_settings(
             return Err(ApiError::bad_request("core must be singbox or xray"));
         }
         repo::set_setting(&st.pool, "default_inbound_core", &v).await?;
+    }
+    if let Some(v) = input.default_subscription_title {
+        if !v.trim().is_empty() {
+            validate_subscription_title(Some(v.trim()))?;
+        }
+        repo::set_setting(&st.pool, "default_subscription_title", v.trim()).await?;
+    }
+    if let Some(v) = input.default_subscription_description {
+        let value = v.trim();
+        if value.chars().count() > 200 {
+            return Err(ApiError::bad_request(
+                "default_subscription_description must be at most 200 characters",
+            ));
+        }
+        repo::set_setting(&st.pool, "default_subscription_description", value).await?;
+    }
+    if let Some(v) = input.subscription_support_url {
+        let value = v.trim();
+        if !value.is_empty() && !(value.starts_with("https://") || value.starts_with("tg://")) {
+            return Err(ApiError::bad_request(
+                "subscription_support_url must use https:// or tg://",
+            ));
+        }
+        repo::set_setting(&st.pool, "subscription_support_url", value).await?;
     }
     if let Some(v) = input.subscription_guard_enabled {
         repo::set_setting(&st.pool, "subscription_guard_enabled", &v.to_string()).await?;
@@ -6451,7 +6497,12 @@ async fn subscription_links(
         .collect::<Vec<_>>()
         .join("\n")
         + "\n";
-    Ok((sub_headers(&user), text))
+    let support = repo::all_settings(&st.pool)
+        .await?
+        .into_iter()
+        .find(|(k, _)| k == "subscription_support_url")
+        .map(|(_, v)| v);
+    Ok((sub_headers(&user, support.as_deref()), text))
 }
 
 /// canonical client subscription: base64 links + Subscription-Userinfo header.
@@ -6461,7 +6512,12 @@ async fn subscription_v2ray(
 ) -> Result<impl IntoResponse, ApiError> {
     let (user, endpoints) = load_subscription(&st, token).await?;
     let body = subscription::v2ray_document(&user, &endpoints);
-    Ok((sub_headers(&user), body))
+    let support = repo::all_settings(&st.pool)
+        .await?
+        .into_iter()
+        .find(|(k, _)| k == "subscription_support_url")
+        .map(|(_, v)| v);
+    Ok((sub_headers(&user, support.as_deref()), body))
 }
 
 #[derive(Deserialize)]
@@ -6636,25 +6692,35 @@ async fn subscription_wg_qr(
 
 /// Headers every subscription response carries: title, quota and refresh hint.
 /// Happ otherwise falls back to displaying the subscription URL hostname.
-fn sub_headers(user: &User) -> [(header::HeaderName, String); 4] {
-    [
-        (
-            header::CONTENT_TYPE,
-            "text/plain; charset=utf-8".to_string(),
-        ),
-        (
-            header::HeaderName::from_static("subscription-userinfo"),
-            subscription::userinfo_header(user),
-        ),
-        (
-            header::HeaderName::from_static("profile-update-interval"),
-            "12".to_string(),
-        ),
-        (
-            header::HeaderName::from_static("profile-title"),
-            subscription::profile_title_header(user),
-        ),
-    ]
+fn sub_headers(user: &User, support_url: Option<&str>) -> HeaderMap {
+    let mut headers = HeaderMap::new();
+    headers.insert(
+        header::CONTENT_TYPE,
+        HeaderValue::from_static("text/plain; charset=utf-8"),
+    );
+    headers.insert(
+        header::HeaderName::from_static("subscription-userinfo"),
+        HeaderValue::from_str(&subscription::userinfo_header(user))
+            .unwrap_or_else(|_| HeaderValue::from_static("")),
+    );
+    headers.insert(
+        header::HeaderName::from_static("profile-update-interval"),
+        HeaderValue::from_static("12"),
+    );
+    if let Ok(value) = HeaderValue::from_str(&subscription::profile_title_header(user)) {
+        headers.insert(header::HeaderName::from_static("profile-title"), value);
+    }
+    if let Some(value) = subscription::announce_header(user) {
+        if let Ok(value) = HeaderValue::from_str(&value) {
+            headers.insert(header::HeaderName::from_static("announce"), value);
+        }
+    }
+    if let Some(value) = support_url.filter(|v| !v.trim().is_empty()) {
+        if let Ok(value) = HeaderValue::from_str(value) {
+            headers.insert(header::HeaderName::from_static("support-url"), value);
+        }
+    }
+    headers
 }
 
 async fn subscription_singbox(
@@ -6691,12 +6757,13 @@ async fn subscription_clash(
     let profile = repo::routing_profile_for_user(&st.pool, user.id).await?;
     let body = subscription::clash_config(&user, &endpoints, profile.as_ref());
     let mut response = ([(header::CONTENT_TYPE, "text/yaml; charset=utf-8")], body).into_response();
-    let headers = sub_headers(&user);
-    for (name, value) in headers {
-        if let Ok(v) = HeaderValue::from_str(&value) {
-            response.headers_mut().insert(name, v);
-        }
-    }
+    let support = repo::all_settings(&st.pool)
+        .await?
+        .into_iter()
+        .find(|(k, _)| k == "subscription_support_url")
+        .map(|(_, v)| v);
+    let headers = sub_headers(&user, support.as_deref());
+    response.headers_mut().extend(headers);
     Ok(response)
 }
 
@@ -6805,6 +6872,22 @@ async fn tailored_response(
     if let Ok(v) = HeaderValue::from_str(&subscription::profile_title_header(user)) {
         headers.insert(header::HeaderName::from_static("profile-title"), v);
     }
+    if let Some(value) = subscription::announce_header(user) {
+        if let Ok(v) = HeaderValue::from_str(&value) {
+            headers.insert(header::HeaderName::from_static("announce"), v);
+        }
+    }
+    if let Some(value) = repo::all_settings(&st.pool)
+        .await?
+        .into_iter()
+        .find(|(k, _)| k == "subscription_support_url")
+        .map(|(_, v)| v)
+        .filter(|v| !v.trim().is_empty())
+    {
+        if let Ok(v) = HeaderValue::from_str(&value) {
+            headers.insert(header::HeaderName::from_static("support-url"), v);
+        }
+    }
     headers.insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
     Ok(response)
 }
@@ -6816,9 +6899,10 @@ async fn subscription_by_alias(
     Path(alias): Path<String>,
     headers: HeaderMap,
 ) -> Result<Response, ApiError> {
-    let user = repo::get_user_by_alias(&st.pool, &alias)
+    let mut user = repo::get_user_by_alias(&st.pool, &alias)
         .await?
         .ok_or_else(|| ApiError::not_found("subscription not found"))?;
+    apply_subscription_defaults(&st, &mut user).await?;
     let ua = headers
         .get(header::USER_AGENT)
         .and_then(|v| v.to_str().ok());
@@ -6937,9 +7021,10 @@ async fn load_subscription_page(
     st: &AppState,
     token: Uuid,
 ) -> Result<(User, Vec<crate::db::models::SubscriptionEndpoint>), ApiError> {
-    let user = repo::get_user_by_subscription_token(&st.pool, token)
+    let mut user = repo::get_user_by_subscription_token(&st.pool, token)
         .await?
         .ok_or_else(|| ApiError::not_found("subscription not found"))?;
+    apply_subscription_defaults(st, &mut user).await?;
     let endpoints = if user.is_active() {
         repo::subscription_endpoints(&st.pool, user.id).await?
     } else {
@@ -6952,12 +7037,13 @@ async fn load_subscription(
     st: &AppState,
     token: Uuid,
 ) -> Result<(User, Vec<crate::db::models::SubscriptionEndpoint>), ApiError> {
-    let user = repo::get_user_by_subscription_token(&st.pool, token)
+    let mut user = repo::get_user_by_subscription_token(&st.pool, token)
         .await?
         .ok_or_else(|| {
             tracing::info!(code = "M0702", "unknown sub token, sending them away");
             ApiError::not_found("subscription not found")
         })?;
+    apply_subscription_defaults(st, &mut user).await?;
     if let Some(reason) = user.suppressed_reason() {
         tracing::info!(code = "M0703", user = %user.id, reason, "sub is gone");
         return Err(ApiError::gone(format!("subscription is {reason}")));
@@ -6965,6 +7051,36 @@ async fn load_subscription(
     let endpoints =
         subscription::expand_endpoints(repo::subscription_endpoints(&st.pool, user.id).await?);
     Ok((user, endpoints))
+}
+
+async fn apply_subscription_defaults(st: &AppState, user: &mut User) -> Result<(), ApiError> {
+    let settings: std::collections::HashMap<String, String> =
+        repo::all_settings(&st.pool).await?.into_iter().collect();
+    if user
+        .subscription_title
+        .as_deref()
+        .map(|v| v.trim().is_empty())
+        .unwrap_or(true)
+    {
+        if let Some(value) = settings.get("default_subscription_title") {
+            if !value.trim().is_empty() {
+                user.subscription_title = Some(value.clone());
+            }
+        }
+    }
+    if user
+        .subscription_description
+        .as_deref()
+        .map(|v| v.trim().is_empty())
+        .unwrap_or(true)
+    {
+        if let Some(value) = settings.get("default_subscription_description") {
+            if !value.trim().is_empty() {
+                user.subscription_description = Some(value.clone());
+            }
+        }
+    }
+    Ok(())
 }
 
 async fn push_nodes(st: &AppState, ids: impl IntoIterator<Item = Uuid>) {
@@ -7527,6 +7643,7 @@ fn validate_user(input: &NewUser) -> Result<(), ApiError> {
         ));
     }
     validate_subscription_title(input.subscription_title.as_deref())?;
+    validate_subscription_description(input.subscription_description.as_deref())?;
     Ok(())
 }
 fn validate_update_user(input: &UpdateUser) -> Result<(), ApiError> {
@@ -7548,6 +7665,9 @@ fn validate_update_user(input: &UpdateUser) -> Result<(), ApiError> {
     if let Patch::Value(title) = &input.subscription_title {
         validate_subscription_title(Some(title))?;
     }
+    if let Patch::Value(description) = &input.subscription_description {
+        validate_subscription_description(Some(description))?;
+    }
     Ok(())
 }
 
@@ -7557,6 +7677,18 @@ fn validate_subscription_title(title: Option<&str>) -> Result<(), ApiError> {
         if !(1..=25).contains(&length) {
             return Err(ApiError::bad_request(
                 "subscription_title must contain 1 to 25 characters",
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn validate_subscription_description(description: Option<&str>) -> Result<(), ApiError> {
+    if let Some(value) = description {
+        let length = value.trim().chars().count();
+        if !(1..=200).contains(&length) {
+            return Err(ApiError::bad_request(
+                "subscription_description must contain 1 to 200 characters",
             ));
         }
     }
@@ -7691,6 +7823,7 @@ mod tests {
             username: "alice".into(),
             password: "secret".into(),
             subscription_title: None,
+            subscription_description: None,
             traffic_limit_bytes: -1,
             expires_at: None,
             device_limit: 0,

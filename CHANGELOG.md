@@ -5,6 +5,18 @@ version tags and is currently pre-stable.
 
 ## [Unreleased]
 
+### Added
+
+- Global or per-user Happ subscription title and announcement templates, with
+  traffic/expiry placeholders and a Telegram support button.
+- Full-screen user creation/editing with generated passwords and prefix-based
+  batch issuance.
+
+### Changed
+
+- Xray TLS remains explicit-cert/REALITY only; the panel now explains that
+  automatic ACME is sing-box-only because Xray has no native ACME manager.
+
 ## [0.0.3] - 2026-07-25
 
 ### Fixed
