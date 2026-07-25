@@ -83,7 +83,7 @@ if [[ ! -x "$AGENT_BIN" || ! -x "$ENROLL_BIN" ]]; then
 fi
 
 echo "[lifecycle] creating disposable database $DB_NAME"
-psql "$ADMIN_DATABASE_URL" -v ON_ERROR_STOP=1 -v db="$DB_NAME" -c 'CREATE DATABASE :"db"' >/dev/null
+psql "$ADMIN_DATABASE_URL" -v ON_ERROR_STOP=1 -c "CREATE DATABASE ${DB_NAME}" >/dev/null
 DATABASE_URL="$DATABASE_URL" HONEY_SECRET_KEY="$SECRET_KEY" "$MASTER_BIN" migrate >/dev/null
 
 mkdir -p "$WORK/pki" "$WORK/agent-certs" "$WORK/config"
