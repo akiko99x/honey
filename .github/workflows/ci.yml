@@ -79,8 +79,11 @@ jobs:
           sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y
           sudo apt-get update
           sudo apt-get install -y postgresql-client-17
+          echo "/usr/lib/postgresql/17/bin" >> "$GITHUB_PATH"
+          export PATH="/usr/lib/postgresql/17/bin:$PATH"
           pg_dump --version
           pg_restore --version
+          test "$(pg_dump --version | awk '{print $3}' | cut -d. -f1)" = "17"
       - name: Empty-database migrations and API lifecycle
         env:
           HONEY_API_TOKEN: ci-test-token
