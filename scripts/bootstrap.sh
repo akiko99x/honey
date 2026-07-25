@@ -282,8 +282,8 @@ install -d -o caddy -g caddy -m 0750 /etc/caddy
 		printf '\temail %s\n' "$caddy_email"
 		printf '}\n'
 	fi
+	printf 'http://%s {\n' "$panel_domain"
 	cat <<'CADDY_HTTP'
-http:// {
 	handle /.well-known/acme-challenge/* {
 		reverse_proxy 127.0.0.1:9080
 	}
@@ -292,7 +292,7 @@ http:// {
 	}
 }
 CADDY_HTTP
-	printf '%s {\n' "$panel_domain"
+	printf 'https://%s {\n' "$panel_domain"
 	printf '    reverse_proxy 127.0.0.1:8080\n'
 	printf '}\n'
 } > /etc/caddy/Caddyfile

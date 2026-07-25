@@ -102,6 +102,10 @@ if grep -Fq 'Host: $panel_domain' scripts/bootstrap.sh; then
 fi
 grep -Fq 'caddy fmt --overwrite /etc/caddy/Caddyfile' scripts/bootstrap.sh ||
 	fail "bootstrap must format the generated Caddyfile"
+grep -Fq "printf 'http://%s {\\n' \"\$panel_domain\"" scripts/bootstrap.sh ||
+	fail "bootstrap must bind the ACME HTTP handler to the panel domain"
+grep -Fq "printf 'https://%s {\\n' \"\$panel_domain\"" scripts/bootstrap.sh ||
+	fail "bootstrap must bind the HTTPS panel handler to the panel domain"
 echo "bootstrap Caddy, session and PKI sandbox contract: ok"
 
 if [[ "$MODE" == "static" ]]; then
