@@ -1,6 +1,6 @@
 <p align="center">
   <kbd>
-    <img src="./d38ce393-e78d-4fbe-86d9-cb813fdaa5e1.png" width="50%" alt="honey logo">
+    <img src="./d38ce393-e78d-4fbe-86d9-cb813fdaa5e1.png" width="100%" alt="honey logo">
   </kbd>
 </p>
 
