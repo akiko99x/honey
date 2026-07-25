@@ -5,6 +5,8 @@ version tags and is currently pre-stable.
 
 ## [Unreleased]
 
+## [0.0.4] - 2026-07-26
+
 ### Added
 
 - Global or per-user Happ subscription title and announcement templates, with
@@ -16,6 +18,11 @@ version tags and is currently pre-stable.
 
 - Xray TLS remains explicit-cert/REALITY only; the panel now explains that
   automatic ACME is sing-box-only because Xray has no native ACME manager.
+
+### Fixed
+
+- Bootstrap emits explicit domain-specific HTTP and HTTPS Caddy blocks so
+  HTTP-01 challenge forwarding is not shadowed by automatic redirects.
 
 ## [0.0.3] - 2026-07-25
 
@@ -63,7 +70,8 @@ version tags and is currently pre-stable.
 - GitHub Actions for tests, database recovery, secret scanning and release
   packaging.
 
-[Unreleased]: https://github.com/akiko99x/honey/compare/v0.0.3...HEAD
+[Unreleased]: https://github.com/akiko99x/honey/compare/v0.0.4...HEAD
+[0.0.4]: https://github.com/akiko99x/honey/compare/v0.0.3...v0.0.4
 [0.0.3]: https://github.com/akiko99x/honey/compare/v0.0.2...v0.0.3
 [0.0.2]: https://github.com/akiko99x/honey/compare/v0.0.1...v0.0.2
 [0.0.1]: https://github.com/akiko99x/honey/compare/v0.0.0...v0.0.1
