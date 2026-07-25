@@ -278,7 +278,9 @@ echo "[8/10] configuring Caddy and systemd"
 install -d -o caddy -g caddy -m 0750 /etc/caddy
 {
 	if [[ -n "$caddy_email" ]]; then
-		printf '%s\n' "{ email $caddy_email }"
+		printf '{\n'
+		printf '\temail %s\n' "$caddy_email"
+		printf '}\n'
 	fi
 	cat <<'CADDY_HTTP'
 http:// {

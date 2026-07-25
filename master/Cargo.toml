@@ -1,6 +1,6 @@
 [package]
 name = "honey-master"
-version = "0.0.1"
+version = "0.0.2"
 edition = "2021"
 description = "honey master — panel, db, rest api, grpc client to node agents"
 license = "AGPL-3.0-only"
