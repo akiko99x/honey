@@ -67,7 +67,7 @@ actual="$(psql "$database_url" -tAc "SELECT count(*) FROM _sqlx_migrations WHERE
 	echo "migration count mismatch: expected $expected, got $actual" >&2
 	exit 1
 }
-for table in notify_channels node_groups node_group_nodes user_node_groups saved_views admin_login_events system_notifications admin_notification_reads; do
+for table in notify_channels node_groups node_group_members user_group_access saved_views admin_login_events system_notifications admin_notification_reads; do
 	psql "$database_url" -tAc \
 		"SELECT 1 FROM information_schema.tables WHERE table_name = '${table}';" | grep -qx 1
 done
