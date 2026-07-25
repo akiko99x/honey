@@ -548,8 +548,14 @@ pub fn announce_header(user: &User) -> Option<String> {
         ("{{DAYS_ELAPSED}}", elapsed.to_string()),
         ("{TRAFFIC_SPENT}", spent.clone()),
         ("{traffic_spent}", spent),
-        ("{TRAFFIC SPENT}", human_bytes(user.used_traffic_bytes.max(0))),
-        ("{{TRAFFIC_SPENT}}", human_bytes(user.used_traffic_bytes.max(0))),
+        (
+            "{TRAFFIC SPENT}",
+            human_bytes(user.used_traffic_bytes.max(0)),
+        ),
+        (
+            "{{TRAFFIC_SPENT}}",
+            human_bytes(user.used_traffic_bytes.max(0)),
+        ),
         ("{DAYS_LEFT}", left.clone()),
         ("{days_left}", left.clone()),
         ("{DAYS LEFT}", left.clone()),
