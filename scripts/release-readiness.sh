@@ -93,6 +93,17 @@ node --check web/app.js
 bash -n scripts/*.sh
 echo "UI and shell syntax: ok"
 
+step "bootstrap sandbox contract"
+grep -Eq '^ReadWritePaths=.* /etc/honey/master-certs( |$)' \
+	deploy/systemd/honey-master.service ||
+	fail "master service cannot write its enrollment PKI directory"
+if grep -Fq 'Host: $panel_domain' scripts/bootstrap.sh; then
+	fail "local bootstrap API calls must keep their loopback Host"
+fi
+grep -Fq 'caddy fmt --overwrite /etc/caddy/Caddyfile' scripts/bootstrap.sh ||
+	fail "bootstrap must format the generated Caddyfile"
+echo "bootstrap Caddy, session and PKI sandbox contract: ok"
+
 if [[ "$MODE" == "static" ]]; then
 	echo "release readiness (static): ok"
 	exit 0

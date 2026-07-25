@@ -27,7 +27,7 @@ import (
 	"github.com/akiko99x/honey/agent/internal/wg"
 )
 
-const agentVersion = "0.0.2"
+const agentVersion = "0.0.3"
 
 // Server implements honeyv1.AgentServiceServer.
 type Server struct {

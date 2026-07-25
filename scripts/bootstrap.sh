@@ -296,6 +296,7 @@ CADDY_HTTP
 	printf '    reverse_proxy 127.0.0.1:8080\n'
 	printf '}\n'
 } > /etc/caddy/Caddyfile
+caddy fmt --overwrite /etc/caddy/Caddyfile
 caddy validate --config /etc/caddy/Caddyfile
 systemctl daemon-reload
 systemctl enable honey-master.service
@@ -329,8 +330,11 @@ with open(sys.argv[1], "w", encoding="utf-8") as handle:
         "password": os.environ["ADMIN_PASSWORD"],
     }, handle)
 PY
+	# These requests intentionally keep curl's loopback Host. Supplying the
+	# public panel domain marks the session cookie Secure, so curl will not
+	# return it over this local HTTP bootstrap channel.
 	curl -fsS -c "$cookie_jar" \
-		-H "Host: $panel_domain" -H 'Content-Type: application/json' \
+		-H 'Content-Type: application/json' \
 		--data-binary "@$api_dir/login.json" \
 		http://127.0.0.1:8080/auth/login > "$api_dir/login-response.json"
 
@@ -351,20 +355,20 @@ with open(sys.argv[1], "w", encoding="utf-8") as handle:
     }, handle)
 PY
 	curl -fsS -b "$cookie_jar" \
-		-H "Host: $panel_domain" -H 'Content-Type: application/json' \
+		-H 'Content-Type: application/json' \
 		--data-binary "@$api_dir/node-create.json" \
 		http://127.0.0.1:8080/nodes > "$api_dir/node.json"
 	node_id="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["id"])' "$api_dir/node.json")"
 
 	printf '{"tls_server_name":"node-%s.honey"}\n' "$node_id" > "$api_dir/node-update.json"
 	curl -fsS -X PATCH -b "$cookie_jar" \
-		-H "Host: $panel_domain" -H 'Content-Type: application/json' \
+		-H 'Content-Type: application/json' \
 		--data-binary "@$api_dir/node-update.json" \
 		"http://127.0.0.1:8080/nodes/$node_id" >/dev/null
 
 	printf '{"expires_in_minutes":30}\n' > "$api_dir/enrollment-create.json"
 	curl -fsS -b "$cookie_jar" \
-		-H "Host: $panel_domain" -H 'Content-Type: application/json' \
+		-H 'Content-Type: application/json' \
 		--data-binary "@$api_dir/enrollment-create.json" \
 		"http://127.0.0.1:8080/nodes/$node_id/enrollments" > "$api_dir/enrollment.json"
 	enrollment_token="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["token"])' "$api_dir/enrollment.json")"

@@ -24,7 +24,7 @@ ProtectControlGroups=true
 RestrictSUIDSGID=true
 LockPersonality=true
 RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
-ReadWritePaths=/opt/honey/bin /var/lib/honey
+ReadWritePaths=/opt/honey/bin /var/lib/honey /etc/honey/master-certs
 
 [Install]
 WantedBy=multi-user.target

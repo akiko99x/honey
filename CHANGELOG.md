@@ -5,6 +5,16 @@ version tags and is currently pre-stable.
 
 ## [Unreleased]
 
+## [0.0.3] - 2026-07-25
+
+### Fixed
+
+- Local-node bootstrap now keeps its session cookie usable over the loopback
+  HTTP connection, allowing node creation and enrollment to complete.
+- Bootstrap formats the generated Caddyfile before validation and installation.
+- The hardened master service can write its dedicated PKI directory while
+  issuing enrolled node certificates.
+
 ## [0.0.2] - 2026-07-25
 
 ### Fixed
@@ -41,7 +51,8 @@ version tags and is currently pre-stable.
 - GitHub Actions for tests, database recovery, secret scanning and release
   packaging.
 
-[Unreleased]: https://github.com/akiko99x/honey/compare/v0.0.2...HEAD
+[Unreleased]: https://github.com/akiko99x/honey/compare/v0.0.3...HEAD
+[0.0.3]: https://github.com/akiko99x/honey/compare/v0.0.2...v0.0.3
 [0.0.2]: https://github.com/akiko99x/honey/compare/v0.0.1...v0.0.2
 [0.0.1]: https://github.com/akiko99x/honey/compare/v0.0.0...v0.0.1
 [0.0.0]: https://github.com/akiko99x/honey/releases/tag/v0.0.0
