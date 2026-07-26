@@ -23,7 +23,7 @@ services:
       - no-new-privileges:true
 
   migrate:
-    image: "${HONEY_IMAGE_PREFIX:-ghcr.io/akiko99x/honey}-master:${HONEY_VERSION:-0.0.8}"
+    image: "${HONEY_IMAGE_PREFIX:-ghcr.io/akiko99x/honey}-master:${HONEY_VERSION:-0.0.9}"
     network_mode: host
     restart: "no"
     command: ["migrate"]
@@ -49,7 +49,7 @@ services:
       - no-new-privileges:true
 
   master:
-    image: "${HONEY_IMAGE_PREFIX:-ghcr.io/akiko99x/honey}-master:${HONEY_VERSION:-0.0.8}"
+    image: "${HONEY_IMAGE_PREFIX:-ghcr.io/akiko99x/honey}-master:${HONEY_VERSION:-0.0.9}"
     network_mode: host
     restart: unless-stopped
     init: true
@@ -84,7 +84,7 @@ services:
 
   agent:
     profiles: ["node"]
-    image: "${HONEY_IMAGE_PREFIX:-ghcr.io/akiko99x/honey}-agent:${HONEY_VERSION:-0.0.8}"
+    image: "${HONEY_IMAGE_PREFIX:-ghcr.io/akiko99x/honey}-agent:${HONEY_VERSION:-0.0.9}"
     network_mode: host
     restart: unless-stopped
     init: true
@@ -132,7 +132,7 @@ services:
       - no-new-privileges:true
 
   backup:
-    image: "${HONEY_IMAGE_PREFIX:-ghcr.io/akiko99x/honey}-backup:${HONEY_VERSION:-0.0.8}"
+    image: "${HONEY_IMAGE_PREFIX:-ghcr.io/akiko99x/honey}-backup:${HONEY_VERSION:-0.0.9}"
     restart: unless-stopped
     environment:
       HONEY_POSTGRES_HOST: postgres

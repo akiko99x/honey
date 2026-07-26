@@ -57,7 +57,15 @@ they stay out of the default build.
 Master, agent and both cores co-host fine on one box. Bind the agent gRPC and all
 core APIs to loopback; expose only the VPN inbound ports.
 
-Docker Compose is the preferred clean-server deployment beginning with v0.0.6:
+Docker Compose is the preferred clean-server deployment. On an amd64
+Ubuntu/Debian host, the single installer script provisions Docker Compose when
+needed, downloads verified release artifacts and tagged images, creates
+PostgreSQL and root-only secrets, applies migrations, configures HTTPS, creates
+the owner and can enroll the same server as the first VPN node.
+
+Before running it, point the panel domain's DNS at the server and allow public
+TCP 80/443. Stop any previous honey/systemd deployment because it uses the same
+host ports.
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/akiko99x/honey/main/scripts/install-docker.sh \
@@ -66,10 +74,23 @@ sudo bash /tmp/honey-install-docker.sh
 rm -f /tmp/honey-install-docker.sh
 ```
 
-It pulls tagged GHCR images, creates root-only Compose secrets, migrates
-PostgreSQL and can enroll the host as the first node. Database, certificates,
-core configs and Caddy state live in persistent volumes. See
-[`docs/docker-deployment.md`](docs/docker-deployment.md).
+The interactive prompts ask for the panel domain, owner username/password and
+whether this host should be the first VPN node. The default selects the latest
+published release; pass `--version vX.Y.Z` to pin one. The completed deployment
+lives in `/opt/honey-docker`; database, certificates, core configs and Caddy
+state live in persistent volumes.
+
+```bash
+cd /opt/honey-docker
+docker compose ps
+curl -fsS https://panel.example.com/health
+
+# Later upgrades create a backup before replacing containers.
+sudo /opt/honey-docker/scripts/install-docker.sh --upgrade
+```
+
+See [`docs/docker-deployment.md`](docs/docker-deployment.md) for
+non-interactive installation, backup/restore and operations.
 
 The previous systemd bootstrap remains available as a legacy/fallback path:
 

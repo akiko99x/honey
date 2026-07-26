@@ -27,14 +27,47 @@ Persistent state:
 
 ## Install and upgrade
 
+For a clean amd64 Ubuntu/Debian server, point the panel domain at the host and
+allow public TCP 80/443. The standalone installer downloads a checksummed
+release, provisions Docker Engine with Compose v2 when necessary, and deploys
+the complete stack:
+
 ```bash
-sudo bash scripts/install-docker.sh
+curl -fsSL https://raw.githubusercontent.com/akiko99x/honey/main/scripts/install-docker.sh \
+  -o /tmp/honey-install-docker.sh
+sudo bash /tmp/honey-install-docker.sh
+rm -f /tmp/honey-install-docker.sh
+```
+
+It prompts for:
+
+1. the panel domain;
+2. the initial owner username and password;
+3. whether to enroll this server as the first VPN node.
+
+No separate PostgreSQL, Caddy, master or agent installation command is needed.
+To pin a release instead of selecting the latest published tag, add
+`--version vX.Y.Z`.
+
+After installation:
+
+```bash
+cd /opt/honey-docker
+docker compose ps
+curl -fsS https://panel.example.com/health
+
+# Upgrade the existing deployment:
 sudo /opt/honey-docker/scripts/install-docker.sh --upgrade
 ```
 
 An upgrade first creates a database dump, then pulls the tagged images and
 recreates services. The one-shot `migrate` service must complete successfully
 before master starts.
+
+Do not run the Compose deployment beside an active systemd honey deployment;
+they share host ports. A failed fresh install can be resumed only after its
+reported error is corrected. Never remove named volumes from a deployment that
+contains data unless destruction is explicitly intended.
 
 After the first image publication, verify that the `honey-master`,
 `honey-agent`, and `honey-backup` GHCR packages are public. GitHub creates new

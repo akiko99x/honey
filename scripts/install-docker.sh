@@ -321,12 +321,11 @@ docker compose run --rm --no-deps \
 	bootstrap-local 127.0.0.1 /etc/honey/master-certs
 printf '%s\n' "$admin_password" >"$runtime_tmp/admin_password"
 chmod 0600 "$runtime_tmp/admin_password"
+unset admin_password password_again
 docker compose run --rm --no-deps \
 	-e HONEY_ADMIN_PASSWORD_FILE=/run/secrets/bootstrap_admin_password \
 	-v "$runtime_tmp/admin_password:/run/secrets/bootstrap_admin_password:ro" master \
 	admin add "$admin_user" --role owner
-rm -f "$runtime_tmp/admin_password"
-unset admin_password password_again
 docker compose run --rm --no-deps master domain add "${panel_domain}/panel"
 
 echo "[6/8] starting master, Caddy and scheduled backups"
@@ -337,16 +336,19 @@ if [[ "$install_local_node" == 1 ]]; then
 	api_dir="$runtime_tmp/api"
 	install -d -m 0700 "$api_dir"
 	cookie_jar="$api_dir/cookies"
-	ADMIN_USERNAME="$admin_user" ADMIN_PASSWORD="$admin_password" \
-		python3 - "$api_dir/login.json" <<'PY'
+	ADMIN_USERNAME="$admin_user" \
+		python3 - "$api_dir/login.json" "$runtime_tmp/admin_password" <<'PY'
 import json, os, sys
+with open(sys.argv[2], "r", encoding="utf-8") as source:
+    password = source.read().rstrip("\r\n")
 with open(sys.argv[1], "w", encoding="utf-8") as handle:
     json.dump({"username": os.environ["ADMIN_USERNAME"],
-               "password": os.environ["ADMIN_PASSWORD"]}, handle)
+               "password": password}, handle)
 PY
 	curl -fsS -c "$cookie_jar" -H 'Content-Type: application/json' \
 		--data-binary "@$api_dir/login.json" \
 		http://127.0.0.1:8080/auth/login >/dev/null
+	rm -f "$api_dir/login.json" "$runtime_tmp/admin_password"
 	local_name="local-$(hostname -s | tr -cs 'A-Za-z0-9._-' '-')"
 	NODE_NAME="$local_name" python3 - "$api_dir/node.json" <<'PY'
 import json, os, sys
@@ -376,6 +378,7 @@ PY
 	docker compose --profile node up -d agent
 else
 	echo "[7/8] local VPN node intentionally skipped"
+	rm -f "$runtime_tmp/admin_password"
 fi
 
 echo "[8/8] checking container health"

@@ -124,6 +124,11 @@ done
 if grep -Fq -- '--entrypoint /usr/local/bin/gen-certs.sh' scripts/install-docker.sh; then
 	fail "Docker PKI bootstrap must pass through the master entrypoint"
 fi
+if grep -Fq 'ADMIN_PASSWORD="$admin_password"' scripts/install-docker.sh; then
+	fail "Docker installer must reuse its root-only password file for local enrollment"
+fi
+grep -Fq '"$runtime_tmp/admin_password"' scripts/install-docker.sh ||
+	fail "Docker installer must retain its password file through local enrollment"
 if grep -Eq '/var/run/docker\.sock|/run/docker\.sock' deploy/docker/compose.yml; then
 	fail "Docker socket must not be mounted into honey services"
 fi

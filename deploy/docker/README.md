@@ -20,23 +20,35 @@ do not require Compose file changes. PostgreSQL alone publishes its port on
 Run the installer from a published release:
 
 ```bash
-sudo bash scripts/install-docker.sh
+curl -fsSL https://raw.githubusercontent.com/akiko99x/honey/main/scripts/install-docker.sh \
+  -o /tmp/honey-install-docker.sh
+sudo bash /tmp/honey-install-docker.sh
+rm -f /tmp/honey-install-docker.sh
 ```
+
+This one script can provision Docker Compose and deploy PostgreSQL, migrations,
+master, Caddy, scheduled backups and an optional local VPN node. It prompts for
+the panel domain, initial owner credentials and whether to enroll the host as
+that node. Use `--version vX.Y.Z` to pin a release.
 
 Non-interactive:
 
 ```bash
+curl -fsSL https://raw.githubusercontent.com/akiko99x/honey/main/scripts/install-docker.sh \
+  -o /tmp/honey-install-docker.sh
 sudo env \
   HONEY_PANEL_DOMAIN=panel.example.com \
   HONEY_ADMIN_USERNAME=owner \
   HONEY_ADMIN_PASSWORD='replace-me' \
   HONEY_INSTALL_LOCAL_NODE=1 \
-  bash scripts/install-docker.sh --non-interactive
+  bash /tmp/honey-install-docker.sh --non-interactive
+rm -f /tmp/honey-install-docker.sh
 ```
 
 The deployment lives in `/opt/honey-docker` by default. Secrets are ordinary
-root-only files consumed through Compose secrets; they are not placed in
-container environment variables.
+root-only files consumed through Compose secrets; they are not stored in the
+Compose `.env` file. The master entrypoint reads them before dropping
+privileges, and the application receives only the runtime values it needs.
 
 The three GHCR packages (`honey-master`, `honey-agent`, and `honey-backup`)
 must be public so a fresh host can pull them without GitHub credentials. Check
