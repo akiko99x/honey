@@ -727,7 +727,10 @@
   function reachBadge(inbound) {
     if (inbound.reachable === true) return '<span class="status ok">reachable</span>';
     if (inbound.reachable === false) return `<span class="status bad" title="${esc(inbound.reach_error || "")}">unreachable</span>`;
-    return '<span class="status">unknown</span>';
+    if (["hysteria2", "tuic"].includes(inbound.kind)) {
+      return '<span class="status warn" title="UDP/QUIC cannot be verified with the master TCP probe. Use an external vantage checker.">UDP · external probe</span>';
+    }
+    return '<span class="status warn" title="No reachability result has been recorded yet. Run a probe or wait for the next refresh.">not checked</span>';
   }
   async function probeInbound(id) {
     try {
@@ -736,7 +739,7 @@
       const i = state.inbounds.findIndex((x) => x.id === id);
       if (i >= 0) state.inbounds[i] = updated;
       await loadData({ quiet: true });
-      toast(updated.reachable === true ? "endpoint reachable" : updated.reachable === false ? "endpoint unreachable" : "not probeable (UDP) — use an external checker");
+      toast(updated.reachable === true ? "endpoint reachable" : updated.reachable === false ? "endpoint unreachable" : "UDP/QUIC needs an external reachability report");
     } catch (error) { toast(error.message, true); }
   }
 
@@ -2373,7 +2376,7 @@
       core: state.settings?.default_inbound_core || "singbox", kind: "vless", node_id: state.nodes[0]?.id || "",
       tag: "", port: "", flow: "xtls-rprx-vision",
       happ_name: "", happ_description: "", country_code: "",
-      security: "reality", network: "tcp", transport_path: "", transport_service_name: "", transport_host: "",
+      security: "reality", network: "tcp", transport_path: "", transport_service_name: "", transport_host: "", transport_mode: "",
       cert_source: "acme", acme_email: "", acme_challenge: "http", acme_http_port: "9080",
       server_name: "www.cloudflare.com", cert_path: "", key_path: "",
       reality_handshake_server: "www.cloudflare.com", reality_handshake_port: "443",
@@ -2397,6 +2400,7 @@
       country_code: ib.extra?.happ?.country_code || "",
       security, network: ib.network || "tcp",
       transport_path: ib.transport_path || "", transport_service_name: ib.transport_service_name || "", transport_host: ib.transport_host || "",
+      transport_mode: ib.transport_mode || "",
       cert_source: acme ? "acme" : "manual", acme_email: (acme && ib.extra.acme.email) || "",
       acme_challenge: acme && ib.extra.acme.disable_http_challenge ? "tls-alpn" : "http",
       acme_http_port: (acme && ib.extra.acme.alternative_http_port) || "9080",
@@ -2447,6 +2451,8 @@
     const nets = wizNetworks(w.core, w.security);
     if (!nets.includes(w.network)) w.network = nets[0];
     if (w.kind !== "vless" || w.network !== "tcp" || w.security === "none") w.flow = "";
+    if (w.network === "xhttp" && !w.transport_mode) w.transport_mode = "packet-up";
+    if (w.network !== "xhttp") w.transport_mode = "";
   }
   function flowChoices(w) {
     if (w.kind !== "vless") return [""];
@@ -2521,6 +2527,7 @@
         <div class="form-row"><label>${helpLabel("Network", "The transport framing used above the protocol. Server and client must use the same transport; paths, hosts or service names appear only when that transport needs them.")}<select data-wiz="network" data-struct>${nets.map((n) => option(n, n, w.network)).join("")}</select></label>
         ${["ws", "httpupgrade", "xhttp"].includes(w.network) ? `<label><span>Path</span><input data-wiz="transport_path" value="${esc(w.transport_path)}" placeholder="/honey"></label>` : w.network === "grpc" ? `<label><span>gRPC service</span><input data-wiz="transport_service_name" value="${esc(w.transport_service_name)}" placeholder="honey"></label>` : `<label><span>&nbsp;</span><span class="form-note" style="padding-top:9px">${w.network === "tcp" ? "raw tcp — no extra options" : esc(w.network) + " — defaults used"}</span></label>`}</div>
         ${["ws", "http", "h2", "httpupgrade", "xhttp"].includes(w.network) ? `<div class="form-row"><label>${helpLabel("CDN host (Host header)", "The HTTP Host value used by this transport. When a public CDN hostname is configured, generated subscriptions connect to it instead of the node address.")}<input data-wiz="transport_host" list="wiz-domains" value="${esc(w.transport_host)}" placeholder="cdn.example.com"></label><label><span>&nbsp;</span><span class="form-note" style="padding-top:9px">set to a registered CDN domain — the subscription connects here, not the origin IP</span></label></div>` : ""}
+        ${w.network === "xhttp" ? `<label>${helpLabel("xHTTP mode", "packet-up is the most broadly compatible XHTTP mode. Keep auto only when you specifically need Xray's automatic mode selection.")}<select data-wiz="transport_mode" data-struct>${["packet-up", "auto", "stream-up", "stream-one"].map((v) => option(v, v, w.transport_mode || "packet-up")).join("")}</select><p class="form-note">packet-up is the recommended default for XHTTP compatibility.</p></label>` : ""}
         ${w.core === "xray" && w.security === "reality" ? `<p class="form-note">xray REALITY allows only tcp / xhttp / grpc.</p>` : ""}
       </div></div>` : ""}
 
@@ -2620,6 +2627,7 @@
       transport_path: showT ? (w.transport_path || "").trim() || null : null,
       transport_host: showT ? (w.transport_host || "").trim() || null : null,
       transport_service_name: showT ? (w.transport_service_name || "").trim() || null : null,
+      transport_mode: showT && w.network === "xhttp" ? (w.transport_mode || "packet-up") : null,
       shadowtls_handshake_server: w.kind === "shadowtls" ? (w.shadowtls_handshake_server || "").trim() || null : null,
       shadowtls_handshake_port: w.kind === "shadowtls" && w.shadowtls_handshake_port ? Number(w.shadowtls_handshake_port) : null,
       extra: (() => {

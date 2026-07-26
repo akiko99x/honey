@@ -501,6 +501,35 @@ pub fn v2ray_document(user: &User, endpoints: &[SubscriptionEndpoint]) -> String
     STANDARD.encode(joined)
 }
 
+/// Happ accepts Hysteria2 auth through its documented `auth` query parameter.
+/// This avoids a desktop importer bug that otherwise copies URI userinfo into
+/// Xray's `settings.address` as `password@hostname`.
+pub fn happ_v2ray_document(user: &User, endpoints: &[SubscriptionEndpoint]) -> String {
+    let joined = endpoint_links(user, endpoints)
+        .into_iter()
+        .filter_map(|link| link.uri.map(|uri| happ_compat_uri(&link.protocol, &uri)))
+        .collect::<Vec<_>>()
+        .join("\n");
+    STANDARD.encode(joined)
+}
+
+fn happ_compat_uri(protocol: &str, uri: &str) -> String {
+    if protocol != "hysteria2" {
+        return uri.to_string();
+    }
+    let Ok(mut url) = Url::parse(uri) else {
+        return uri.to_string();
+    };
+    let auth = url.username().to_string();
+    if auth.is_empty() {
+        return uri.to_string();
+    }
+    let _ = url.set_username("");
+    let _ = url.set_password(None);
+    url.query_pairs_mut().append_pair("auth", &auth);
+    url.into()
+}
+
 /// `Subscription-Userinfo` header value so clients can show quota + expiry.
 /// `used_traffic_bytes` is up+down combined, reported here as download.
 pub fn userinfo_header(user: &User) -> String {
@@ -1277,6 +1306,22 @@ mod tests {
 
         let clash: Json = serde_json::from_str(&clash_config(&user, &[endpoint], None)).unwrap();
         assert_eq!(clash["proxies"][0]["type"], "hysteria2");
+    }
+
+    #[test]
+    fn renders_happ_hysteria_auth_as_query_parameter() {
+        let user = user();
+        let mut endpoint = endpoint();
+        endpoint.kind = "hysteria2".into();
+        endpoint.address = "hy2.example.com".into();
+        endpoint.reality = false;
+        endpoint.server_name = Some("hy2.example.com".into());
+
+        let encoded = happ_v2ray_document(&user, &[endpoint]);
+        let decoded = String::from_utf8(STANDARD.decode(encoded).unwrap()).unwrap();
+        assert!(decoded.starts_with("hysteria2://hy2.example.com:443/?sni=hy2.example.com"));
+        assert!(decoded.contains("&auth=secret"));
+        assert!(!decoded.contains("secret@"));
     }
 
     #[test]

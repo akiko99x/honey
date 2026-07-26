@@ -6794,6 +6794,7 @@ async fn subscription_qr(
 #[derive(Clone, Copy)]
 enum SubFormat {
     V2ray,
+    Happ,
     Clash,
     Singbox,
 }
@@ -6809,13 +6810,15 @@ fn format_for_ua(ua: &str) -> Option<SubFormat> {
     if has(&["sing-box", "singbox", "sfa", "sfi", "sft", "hiddify"]) {
         return Some(SubFormat::Singbox);
     }
+    if has(&["happ"]) {
+        return Some(SubFormat::Happ);
+    }
     if has(&[
         "v2ray",
         "nekobox",
         "nekoray",
         "streisand",
         "shadowrocket",
-        "happ",
         "v2raytun",
         "loon",
         "surge",
@@ -6843,6 +6846,10 @@ async fn tailored_response(
         SubFormat::V2ray => (
             "text/plain; charset=utf-8",
             subscription::v2ray_document(user, endpoints),
+        ),
+        SubFormat::Happ => (
+            "text/plain; charset=utf-8",
+            subscription::happ_v2ray_document(user, endpoints),
         ),
         SubFormat::Singbox => {
             let profile = repo::routing_profile_for_user(&st.pool, user.id).await?;
