@@ -8035,6 +8035,7 @@ mod tests {
         let mut inbound = valid_reality_inbound();
         inbound.kind = "hysteria2".into();
         inbound.core = "singbox".into();
+        inbound.flow.clear();
         inbound.reality = false;
         inbound.cert_path = Some("/etc/honey/fullchain.pem".into());
         inbound.key_path = Some("/etc/honey/privkey.pem".into());
@@ -8071,6 +8072,7 @@ mod tests {
         inbound.cert_path = Some("/etc/honey/fullchain.pem".into());
         inbound.key_path = Some("/etc/honey/privkey.pem".into());
         inbound.network = "xhttp".into();
+        inbound.flow.clear();
         assert!(validate_inbound(&inbound).is_ok());
     }
 
