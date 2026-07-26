@@ -3,6 +3,8 @@ package xrayacme
 import (
 	"context"
 	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"testing"
@@ -37,7 +39,7 @@ func TestPrepareValidationUsesDisposableCertificate(t *testing.T) {
 	}
 }
 
-func TestPrepareRejectsXrayTLSALPNAndWrongPort(t *testing.T) {
+func TestPrepareRejectsDisabledHTTPChallengeAndWrongPort(t *testing.T) {
 	for _, extra := range []string{
 		`{"acme":{"email":"ops@example.com","disable_http_challenge":true}}`,
 		`{"acme":{"email":"ops@example.com","alternative_http_port":19082}}`,
@@ -67,5 +69,19 @@ func TestRewriteSingboxChallengePort(t *testing.T) {
 	}
 	if got := extra["acme"].(map[string]any)["alternative_http_port"]; got != float64(19082) {
 		t.Fatalf("expected sing-box upstream port 19082, got %#v", got)
+	}
+}
+
+func TestServeHTTPServesOnlyActiveHTTP01Token(t *testing.T) {
+	manager := New(t.TempDir(), "127.0.0.1:19080", "127.0.0.1:19082")
+	manager.domains["vpn.example.com"] = &managedDomain{
+		challenges: map[string]string{"token-123": "token-123.key"},
+	}
+	req := httptest.NewRequest(http.MethodGet, "http://vpn.example.com/.well-known/acme-challenge/token-123", nil)
+	req.Host = "vpn.example.com"
+	rec := httptest.NewRecorder()
+	manager.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK || rec.Body.String() != "token-123.key" {
+		t.Fatalf("unexpected challenge response: %d %q", rec.Code, rec.Body.String())
 	}
 }

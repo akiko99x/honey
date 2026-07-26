@@ -5,6 +5,15 @@ version tags and is currently pre-stable.
 
 ## [Unreleased]
 
+## [0.0.10] - 2026-07-26
+
+### Fixed
+
+- Xray ACME now uses an explicit HTTP-01 flow instead of autocert's
+  TLS-ALPN-first behavior, so it works behind the Docker Caddy gateway.
+- Application-level agent apply failures no longer mark a healthy node offline.
+- Docker upgrades restart Caddy after replacing the bind-mounted configuration.
+
 ## [0.0.9] - 2026-07-26
 
 ### Fixed
@@ -135,7 +144,8 @@ version tags and is currently pre-stable.
 - GitHub Actions for tests, database recovery, secret scanning and release
   packaging.
 
-[Unreleased]: https://github.com/akiko99x/honey/compare/v0.0.9...HEAD
+[Unreleased]: https://github.com/akiko99x/honey/compare/v0.0.10...HEAD
+[0.0.10]: https://github.com/akiko99x/honey/compare/v0.0.9...v0.0.10
 [0.0.9]: https://github.com/akiko99x/honey/compare/v0.0.8...v0.0.9
 [0.0.8]: https://github.com/akiko99x/honey/compare/v0.0.7...v0.0.8
 [0.0.7]: https://github.com/akiko99x/honey/compare/v0.0.6...v0.0.7

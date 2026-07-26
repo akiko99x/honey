@@ -104,7 +104,8 @@ policy as the systemd timer.
 Caddy owns public TCP 80/443. Requests under
 `/.well-known/acme-challenge/` are forwarded to the Honey agent gateway at
 `127.0.0.1:9080`. The gateway serves Honey-managed Xray HTTP-01 challenges and
-proxies sing-box challenges to `127.0.0.1:9082`.
+proxies sing-box challenges to `127.0.0.1:9082` for every inbound hostname;
+other HTTP requests redirect to the panel's HTTPS endpoint.
 
 ## Security notes
 

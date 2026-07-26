@@ -96,6 +96,10 @@ bash -n scripts/*.sh
 bash -n deploy/docker/*.sh
 grep -Fq '${HONEY_POSTGRES_BIND:-127.0.0.1}' deploy/docker/compose.yml ||
 	fail "Docker PostgreSQL must bind to loopback by default"
+grep -Fq 'http:// {' deploy/docker/Caddyfile ||
+	fail "Docker Caddy must accept ACME challenges for arbitrary inbound hostnames"
+grep -Fq 'reverse_proxy 127.0.0.1:9080' deploy/docker/Caddyfile ||
+	fail "Docker Caddy must forward HTTP-01 challenges to Honey"
 grep -Fq 'master_config:/etc/honey' deploy/docker/compose.yml ||
 	fail "Docker master must use a dedicated config volume"
 grep -Fq 'agent_config:/etc/honey' deploy/docker/compose.yml ||
@@ -129,6 +133,8 @@ if grep -Fq 'ADMIN_PASSWORD="$admin_password"' scripts/install-docker.sh; then
 fi
 grep -Fq '"$runtime_tmp/admin_password"' scripts/install-docker.sh ||
 	fail "Docker installer must retain its password file through local enrollment"
+grep -Fq 'docker compose restart caddy' scripts/install-docker.sh ||
+	fail "Docker upgrades must reload changed bind-mounted Caddy configuration"
 if grep -Eq '/var/run/docker\.sock|/run/docker\.sock' deploy/docker/compose.yml; then
 	fail "Docker socket must not be mounted into honey services"
 fi

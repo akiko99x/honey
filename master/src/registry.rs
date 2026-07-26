@@ -410,7 +410,9 @@ impl Registry {
         Ok(PushOutcome::Pushed)
     }
 
-    /// send an Apply to the connected agent; drop the conn if the rpc fails.
+    /// Send an Apply to the connected agent. An application-level rejection
+    /// means the channel is still healthy; only a tonic transport/status error
+    /// invalidates the cached client.
     async fn apply(&self, node_id: Uuid, spec: crate::pb::NodeSpec) -> Result<CoreStatus> {
         let mut client = self
             .client_of(node_id)
@@ -420,12 +422,18 @@ impl Registry {
         match client.apply(spec).await {
             Ok(status) => Ok(status),
             Err(e) => {
-                self.remove(node_id).await; // stale channel — force a reconnect
-                tracing::warn!(code = "M0407", %node_id, "node disconnected!");
+                if is_rpc_failure(&e) {
+                    self.remove(node_id).await; // stale channel — force a reconnect
+                    tracing::warn!(code = "M0407", %node_id, "node disconnected!");
+                }
                 Err(e)
             }
         }
     }
+}
+
+fn is_rpc_failure(error: &anyhow::Error) -> bool {
+    error.downcast_ref::<tonic::Status>().is_some()
 }
 
 fn take_due_push(pending: &mut HashMap<Uuid, Instant>, node_id: Uuid, now: Instant) -> bool {
@@ -458,5 +466,14 @@ mod tests {
             now + Duration::from_secs(5)
         ));
         assert!(!pending.contains_key(&node_id));
+    }
+
+    #[test]
+    fn application_rejection_does_not_look_like_disconnect() {
+        let rejected = anyhow!("agent apply failed: certificate unavailable");
+        assert!(!is_rpc_failure(&rejected));
+
+        let unavailable = anyhow::Error::new(tonic::Status::unavailable("connection closed"));
+        assert!(is_rpc_failure(&unavailable));
     }
 }

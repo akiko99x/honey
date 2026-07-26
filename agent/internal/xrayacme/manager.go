@@ -7,6 +7,7 @@ package xrayacme
 
 import (
 	"context"
+	"crypto"
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
@@ -18,6 +19,7 @@ import (
 	"encoding/json"
 	"encoding/pem"
 	"fmt"
+	"io"
 	"math/big"
 	"net"
 	"net/http"
@@ -68,9 +70,11 @@ type persistedRequest struct {
 
 type managedDomain struct {
 	request
-	manager *autocert.Manager
-	handler http.Handler
-	mu      sync.Mutex
+	client     *acme.Client
+	account    *acme.Account
+	challenges map[string]string
+	mu         sync.Mutex
+	challenge  sync.RWMutex
 }
 
 // Manager owns the local challenge gateway and active Xray ACME domains.
@@ -158,8 +162,18 @@ func (m *Manager) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	domain := m.domains[host]
 	m.mu.RUnlock()
 	if domain != nil {
-		domain.handler.ServeHTTP(w, r)
-		return
+		const prefix = "/.well-known/acme-challenge/"
+		if strings.HasPrefix(r.URL.Path, prefix) {
+			token := strings.TrimPrefix(r.URL.Path, prefix)
+			domain.challenge.RLock()
+			response, ok := domain.challenges[token]
+			domain.challenge.RUnlock()
+			if ok {
+				w.Header().Set("Content-Type", "text/plain")
+				_, _ = io.WriteString(w, response)
+				return
+			}
+		}
 	}
 	m.proxy.ServeHTTP(w, r)
 }
@@ -325,22 +339,23 @@ func (m *Manager) activate(requests map[string]request) error {
 			next[domain] = current
 			continue
 		}
-		cacheDir := filepath.Join(m.root, safePart(domain), "cache")
+		// Keep staging and production account keys separate. Switching CA
+		// directories must not reuse an account KID from the other CA.
+		cacheDir := filepath.Join(m.root, safePart(domain+"|"+req.directory), "cache")
 		if err := os.MkdirAll(cacheDir, 0o700); err != nil {
 			return err
 		}
-		client := &acme.Client{DirectoryURL: req.directory}
-		manager := &autocert.Manager{
-			Prompt:     autocert.AcceptTOS,
-			Cache:      autocert.DirCache(cacheDir),
-			HostPolicy: autocert.HostWhitelist(domain),
-			Email:      req.email,
-			Client:     client,
+		key, account, err := loadAccount(cacheDir, req.email)
+		if err != nil {
+			return fmt.Errorf("load ACME account for %s: %w", domain, err)
+		}
+		client := &acme.Client{Key: key, DirectoryURL: req.directory}
+		if account.URI != "" {
+			client.KID = acme.KeyID(account.URI)
 		}
 		next[domain] = &managedDomain{
-			request: req,
-			manager: manager,
-			handler: manager.HTTPHandler(http.NotFoundHandler()),
+			request: req, client: client, account: account,
+			challenges: map[string]string{},
 		}
 	}
 	m.domains = next
@@ -403,25 +418,94 @@ func (m *Manager) ensure(ctx context.Context, domain string) (bool, error) {
 	entry.mu.Lock()
 	defer entry.mu.Unlock()
 
-	type result struct {
-		cert *tls.Certificate
-		err  error
+	certPath, keyPath := m.paths(domain)
+	if cert := loadUsableCertificate(certPath, keyPath); cert != nil {
+		return false, nil
 	}
-	done := make(chan result, 1)
-	go func() {
-		cert, err := entry.manager.GetCertificate(&tls.ClientHelloInfo{ServerName: domain})
-		done <- result{cert: cert, err: err}
-	}()
-	var got result
-	select {
-	case <-ctx.Done():
-		return false, ctx.Err()
-	case got = <-done:
+	cert, err := m.issueHTTP01(ctx, entry)
+	if err != nil {
+		return false, err
 	}
-	if got.err != nil {
-		return false, got.err
+	return m.export(domain, cert)
+}
+
+func (m *Manager) issueHTTP01(ctx context.Context, entry *managedDomain) (*tls.Certificate, error) {
+	if entry.account == nil || entry.account.URI == "" {
+		account, err := entry.client.Register(ctx, &acme.Account{
+			Contact: []string{"mailto:" + entry.email},
+		}, acme.AcceptTOS)
+		if err != nil {
+			return nil, fmt.Errorf("register ACME account: %w", err)
+		}
+		entry.account = account
+		if err := saveAccount(filepath.Join(m.root, safePart(entry.domain), "cache"), account); err != nil {
+			return nil, fmt.Errorf("save ACME account: %w", err)
+		}
 	}
-	return m.export(domain, got.cert)
+	order, err := entry.client.AuthorizeOrder(ctx, acme.DomainIDs(entry.domain))
+	if err != nil {
+		return nil, fmt.Errorf("create ACME order: %w", err)
+	}
+	for _, authzURL := range order.AuthzURLs {
+		authz, err := entry.client.GetAuthorization(ctx, authzURL)
+		if err != nil {
+			return nil, fmt.Errorf("fetch ACME authorization: %w", err)
+		}
+		if authz.Status == acme.StatusValid {
+			continue
+		}
+		var challenge *acme.Challenge
+		for _, candidate := range authz.Challenges {
+			if candidate.Type == "http-01" {
+				challenge = candidate
+				break
+			}
+		}
+		if challenge == nil {
+			return nil, fmt.Errorf("ACME server did not offer HTTP-01 for %s", entry.domain)
+		}
+		response, err := entry.client.HTTP01ChallengeResponse(challenge.Token)
+		if err != nil {
+			return nil, fmt.Errorf("build HTTP-01 response: %w", err)
+		}
+		entry.challenge.Lock()
+		entry.challenges[challenge.Token] = response
+		entry.challenge.Unlock()
+		_, acceptErr := entry.client.Accept(ctx, challenge)
+		if acceptErr == nil {
+			_, acceptErr = entry.client.WaitAuthorization(ctx, authz.URI)
+		}
+		entry.challenge.Lock()
+		delete(entry.challenges, challenge.Token)
+		entry.challenge.Unlock()
+		if acceptErr != nil {
+			return nil, fmt.Errorf("validate HTTP-01 challenge: %w", acceptErr)
+		}
+	}
+	order, err = entry.client.WaitOrder(ctx, order.URI)
+	if err != nil {
+		return nil, fmt.Errorf("wait for ACME order: %w", err)
+	}
+	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		return nil, fmt.Errorf("generate certificate key: %w", err)
+	}
+	csrDER, err := x509.CreateCertificateRequest(rand.Reader, &x509.CertificateRequest{
+		Subject:  pkix.Name{CommonName: entry.domain},
+		DNSNames: []string{entry.domain},
+	}, key)
+	if err != nil {
+		return nil, fmt.Errorf("create certificate request: %w", err)
+	}
+	der, _, err := entry.client.CreateOrderCert(ctx, order.FinalizeURL, csrDER, true)
+	if err != nil {
+		return nil, fmt.Errorf("finalize ACME order: %w", err)
+	}
+	cert := &tls.Certificate{Certificate: der, PrivateKey: key}
+	if len(cert.Certificate) == 0 {
+		return nil, fmt.Errorf("ACME returned an empty certificate chain")
+	}
+	return cert, nil
 }
 
 func (m *Manager) export(domain string, cert *tls.Certificate) (bool, error) {
@@ -446,6 +530,75 @@ func (m *Manager) export(domain string, cert *tls.Certificate) (bool, error) {
 		return false, err
 	}
 	return old != digestFiles(certPath, keyPath), nil
+}
+
+func loadAccount(cacheDir, email string) (crypto.Signer, *acme.Account, error) {
+	keyPath := filepath.Join(cacheDir, "account.key")
+	accountPath := filepath.Join(cacheDir, "account.json")
+	var key crypto.Signer
+	data, err := os.ReadFile(keyPath)
+	if os.IsNotExist(err) {
+		generated, genErr := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+		if genErr != nil {
+			return nil, nil, genErr
+		}
+		key = generated
+		keyDER, marshalErr := x509.MarshalPKCS8PrivateKey(key)
+		if marshalErr != nil {
+			return nil, nil, marshalErr
+		}
+		if err := atomicWrite(keyPath, pem.EncodeToMemory(&pem.Block{
+			Type: "PRIVATE KEY", Bytes: keyDER,
+		}), 0o600); err != nil {
+			return nil, nil, err
+		}
+	} else if err != nil {
+		return nil, nil, err
+	} else {
+		block, _ := pem.Decode(data)
+		if block == nil {
+			return nil, nil, fmt.Errorf("invalid account key PEM")
+		}
+		signer, parseErr := x509.ParsePKCS8PrivateKey(block.Bytes)
+		if parseErr != nil {
+			return nil, nil, parseErr
+		}
+		var ok bool
+		key, ok = signer.(crypto.Signer)
+		if !ok {
+			return nil, nil, fmt.Errorf("account key is not a signing key")
+		}
+	}
+	var account acme.Account
+	data, err = os.ReadFile(accountPath)
+	if os.IsNotExist(err) {
+		account.Contact = []string{"mailto:" + strings.TrimSpace(email)}
+	} else if err != nil {
+		return nil, nil, err
+	} else if err := json.Unmarshal(data, &account); err != nil {
+		return nil, nil, err
+	}
+	return key, &account, nil
+}
+
+func saveAccount(cacheDir string, account *acme.Account) error {
+	data, err := json.MarshalIndent(account, "", "  ")
+	if err != nil {
+		return err
+	}
+	return atomicWrite(filepath.Join(cacheDir, "account.json"), append(data, '\n'), 0o600)
+}
+
+func loadUsableCertificate(certPath, keyPath string) *tls.Certificate {
+	cert, err := tls.LoadX509KeyPair(certPath, keyPath)
+	if err != nil || len(cert.Certificate) == 0 {
+		return nil
+	}
+	leaf, err := x509.ParseCertificate(cert.Certificate[0])
+	if err != nil || time.Until(leaf.NotAfter) <= 30*24*time.Hour {
+		return nil
+	}
+	return &cert
 }
 
 func (m *Manager) renewLoop(ctx context.Context) {

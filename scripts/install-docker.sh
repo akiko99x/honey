@@ -207,6 +207,9 @@ if [[ -f "$install_dir/compose.yml" ]]; then
 	(cd "$install_dir" && docker compose pull)
 	echo "[4/8] migrating and recreating containers"
 	(cd "$install_dir" && docker compose up -d --remove-orphans)
+	# Bind-mounted Caddyfile content is not part of Compose's service hash, so
+	# explicitly reload it even when the Caddy image itself did not change.
+	(cd "$install_dir" && docker compose restart caddy)
 	panel_domain="$(
 		sed -n 's/^HONEY_PANEL_DOMAIN=//p' "$install_dir/.env" | tail -n 1
 	)"

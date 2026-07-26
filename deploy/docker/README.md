@@ -87,6 +87,10 @@ The master container entrypoint starts as root only long enough to read
 root-owned Compose secrets, then uses `gosu` before invoking `honey-master` or
 release helpers. The application and migrations run as the `honey` user.
 
+Caddy accepts HTTP-01 challenge requests for every hostname on this server and
+forwards them to the local Honey ACME gateway; other HTTP requests redirect to
+the panel's HTTPS endpoint.
+
 ## Legacy migration
 
 Do not start this Compose stack alongside an active systemd honey deployment:

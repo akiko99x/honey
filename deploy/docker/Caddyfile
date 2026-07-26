@@ -1,4 +1,4 @@
-http://{$HONEY_PANEL_DOMAIN} {
+http:// {
 	handle /.well-known/acme-challenge/* {
 		reverse_proxy 127.0.0.1:9080
 	}
