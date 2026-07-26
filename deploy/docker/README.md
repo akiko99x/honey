@@ -40,10 +40,15 @@ sudo env \
   HONEY_PANEL_DOMAIN=panel.example.com \
   HONEY_ADMIN_USERNAME=owner \
   HONEY_ADMIN_PASSWORD='replace-me' \
-  HONEY_INSTALL_LOCAL_NODE=1 \
+HONEY_INSTALL_LOCAL_NODE=1 \
   bash /tmp/honey-install-docker.sh --non-interactive
 rm -f /tmp/honey-install-docker.sh
 ```
+
+For a local node, the installer detects the host's public IPv4 address before
+creating the node record. If the server is behind NAT or outbound detection is
+blocked, set `HONEY_NODE_ADDRESS` explicitly; it must be the address clients
+and the master can use to reach the node, not `127.0.0.1`.
 
 The deployment lives in `/opt/honey-docker` by default. Secrets are ordinary
 root-only files consumed through Compose secrets; they are not stored in the

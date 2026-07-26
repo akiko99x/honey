@@ -919,7 +919,7 @@ async fn metrics(State(st): State<AppState>) -> Result<Response, ApiError> {
          honey_issues{{severity=\"info\"}} {}\n",
         issue_counts.critical, issue_counts.warning, issue_counts.info,
     );
-    Ok(([(header::CONTENT_TYPE, "text/plain; version=0.0.10")], body).into_response())
+    Ok(([(header::CONTENT_TYPE, "text/plain; version=0.0.11")], body).into_response())
 }
 
 async fn list_issues(
@@ -7297,6 +7297,7 @@ fn validate_inbound(input: &NewInbound) -> Result<(), ApiError> {
             "network must be one of tcp/ws/grpc/http/h2/httpupgrade/xhttp/quic/mkcp",
         ));
     }
+    validate_vless_flow(&input.kind, &input.network, input.tls_enabled, &input.flow)?;
     if input
         .shadowtls_handshake_port
         .is_some_and(|port| !(1..=65_535).contains(&port))
@@ -7324,6 +7325,34 @@ fn is_valid_network(network: &str) -> bool {
         network,
         "tcp" | "ws" | "grpc" | "http" | "h2" | "httpupgrade" | "xhttp" | "quic" | "mkcp"
     )
+}
+
+fn validate_vless_flow(
+    kind: &str,
+    network: &str,
+    tls_enabled: bool,
+    flow: &str,
+) -> Result<(), ApiError> {
+    let flow = flow.trim();
+    if flow.is_empty() {
+        return Ok(());
+    }
+    if kind != "vless" {
+        return Err(ApiError::bad_request(
+            "flow is only supported for vless inbounds",
+        ));
+    }
+    if flow != "xtls-rprx-vision" {
+        return Err(ApiError::bad_request(
+            "unsupported VLESS flow; use xtls-rprx-vision or leave it empty",
+        ));
+    }
+    if network != "tcp" || !tls_enabled {
+        return Err(ApiError::bad_request(
+            "xtls-rprx-vision requires VLESS over TCP with TLS or REALITY",
+        ));
+    }
+    Ok(())
 }
 
 /// ACME contact: extra.acme.email, or a legacy top-level extra.acme_email.
@@ -7373,6 +7402,15 @@ fn validate_update_inbound(input: &UpdateInbound) -> Result<(), ApiError> {
     {
         return Err(ApiError::bad_request("unsupported network transport"));
     }
+    if input
+        .flow
+        .as_deref()
+        .is_some_and(|flow| !flow.trim().is_empty() && flow != "xtls-rprx-vision")
+    {
+        return Err(ApiError::bad_request(
+            "unsupported VLESS flow; use xtls-rprx-vision or leave it empty",
+        ));
+    }
     if matches!(
         input.shadowtls_handshake_port,
         Patch::Value(port) if !(1..=65_535).contains(&port)
@@ -7389,12 +7427,14 @@ fn validate_effective_update(current: &Inbound, input: &UpdateInbound) -> Result
     let tls_enabled = input.tls_enabled.unwrap_or(current.tls_enabled);
     let reality = input.reality.unwrap_or(current.reality);
     let network = input.network.as_deref().unwrap_or(&current.network);
+    let flow = input.flow.as_deref().unwrap_or(&current.flow);
     let short_ids = input
         .reality_short_ids
         .as_deref()
         .unwrap_or(&current.reality_short_ids);
     let extra = input.extra.as_ref().unwrap_or(&current.extra);
     let acme = acme_enabled(extra);
+    validate_vless_flow(kind, network, tls_enabled, flow)?;
     validate_effective_security(
         kind,
         core,
@@ -8030,6 +8070,27 @@ mod tests {
         inbound.extra = json!({});
         inbound.cert_path = Some("/etc/honey/fullchain.pem".into());
         inbound.key_path = Some("/etc/honey/privkey.pem".into());
+        inbound.network = "xhttp".into();
+        assert!(validate_inbound(&inbound).is_ok());
+    }
+
+    #[test]
+    fn enforces_vless_flow_compatibility() {
+        let mut inbound = valid_reality_inbound();
+        inbound.flow = "unsupported-flow".into();
+        assert!(validate_inbound(&inbound).is_err());
+
+        let mut inbound = valid_reality_inbound();
+        inbound.network = "xhttp".into();
+        assert!(validate_inbound(&inbound).is_err());
+
+        let mut inbound = valid_reality_inbound();
+        inbound.kind = "hysteria2".into();
+        inbound.flow = "xtls-rprx-vision".into();
+        assert!(validate_inbound(&inbound).is_err());
+
+        let mut inbound = valid_reality_inbound();
+        inbound.flow.clear();
         inbound.network = "xhttp".into();
         assert!(validate_inbound(&inbound).is_ok());
     }

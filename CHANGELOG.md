@@ -5,6 +5,19 @@ version tags and is currently pre-stable.
 
 ## [Unreleased]
 
+## [0.0.11] - 2026-07-26
+
+### Fixed
+
+- TUIC sing-box users now include both the required UUID and password, so a
+  combined Hysteria2/TUIC configuration validates and starts correctly.
+- Inbound flow values are validated consistently by the API and the guided
+  form now offers only supported VLESS choices.
+- Creating users, nodes, and inbounds now returns to the matching list after
+  the result dialog is dismissed.
+- Docker and bootstrap local-node enrollment now use the detected public IPv4
+  address, with `HONEY_NODE_ADDRESS` available for NAT or restricted hosts.
+
 ## [0.0.10] - 2026-07-26
 
 ### Fixed
@@ -144,7 +157,8 @@ version tags and is currently pre-stable.
 - GitHub Actions for tests, database recovery, secret scanning and release
   packaging.
 
-[Unreleased]: https://github.com/akiko99x/honey/compare/v0.0.10...HEAD
+[Unreleased]: https://github.com/akiko99x/honey/compare/v0.0.11...HEAD
+[0.0.11]: https://github.com/akiko99x/honey/compare/v0.0.10...v0.0.11
 [0.0.10]: https://github.com/akiko99x/honey/compare/v0.0.9...v0.0.10
 [0.0.9]: https://github.com/akiko99x/honey/compare/v0.0.8...v0.0.9
 [0.0.8]: https://github.com/akiko99x/honey/compare/v0.0.7...v0.0.8

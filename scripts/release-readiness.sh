@@ -135,6 +135,10 @@ grep -Fq '"$runtime_tmp/admin_password"' scripts/install-docker.sh ||
 	fail "Docker installer must retain its password file through local enrollment"
 grep -Fq 'docker compose restart caddy' scripts/install-docker.sh ||
 	fail "Docker upgrades must reload changed bind-mounted Caddy configuration"
+grep -Fq 'HONEY_NODE_ADDRESS' scripts/install-docker.sh ||
+	fail "Docker installer must support an explicit public node address override"
+grep -Fq 'api.ipify.org' scripts/install-docker.sh ||
+	fail "Docker installer must detect the public node address automatically"
 if grep -Eq '/var/run/docker\.sock|/run/docker\.sock' deploy/docker/compose.yml; then
 	fail "Docker socket must not be mounted into honey services"
 fi
@@ -159,6 +163,8 @@ grep -Fq "printf 'http://%s {\\n' \"\$panel_domain\"" scripts/bootstrap.sh ||
 	fail "bootstrap must bind the ACME HTTP handler to the panel domain"
 grep -Fq "printf 'https://%s {\\n' \"\$panel_domain\"" scripts/bootstrap.sh ||
 	fail "bootstrap must bind the HTTPS panel handler to the panel domain"
+grep -Fq 'HONEY_NODE_ADDRESS' scripts/bootstrap.sh ||
+	fail "bootstrap must support an explicit public node address override"
 echo "bootstrap Caddy, session and PKI sandbox contract: ok"
 
 if [[ "$MODE" == "static" ]]; then

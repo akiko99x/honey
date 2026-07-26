@@ -46,6 +46,10 @@ It prompts for:
 3. whether to enroll this server as the first VPN node.
 
 No separate PostgreSQL, Caddy, master or agent installation command is needed.
+When local-node enrollment is enabled, the installer detects the host's public
+IPv4 address instead of registering `127.0.0.1`. For NAT, split-horizon DNS, or
+hosts where public-IP detection is blocked, set `HONEY_NODE_ADDRESS` to the
+address that the master and clients can actually reach.
 To pin a release instead of selecting the latest published tag, add
 `--version vX.Y.Z`.
 

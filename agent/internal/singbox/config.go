@@ -209,7 +209,12 @@ func buildUsers(inboundType string, users []core.User) []map[string]any {
 			if inboundType == "vless" && u.Flow != "" {
 				um["flow"] = u.Flow
 			}
-		case "trojan", "hysteria2", "tuic", "shadowsocks", "anytls", "shadowtls":
+		case "trojan", "hysteria2", "shadowsocks", "anytls", "shadowtls":
+			um["password"] = u.Password
+		case "tuic":
+			// sing-box TUIC identifies users with both a UUID and password.
+			// Omitting the UUID makes sing-box reject the whole config.
+			um["uuid"] = u.UUID
 			um["password"] = u.Password
 		default:
 			if u.UUID != "" {

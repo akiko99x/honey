@@ -13,7 +13,8 @@ Fresh non-interactive installs require:
   HONEY_PANEL_DOMAIN, HONEY_ADMIN_USERNAME, HONEY_ADMIN_PASSWORD
 
 Optional:
-  HONEY_INSTALL_LOCAL_NODE=0|1, HONEY_POSTGRES_PORT, HONEY_BACKUP_DIR
+  HONEY_INSTALL_LOCAL_NODE=0|1, HONEY_NODE_ADDRESS, HONEY_POSTGRES_PORT,
+  HONEY_BACKUP_DIR
 EOF
 	exit 2
 }
@@ -336,6 +337,15 @@ docker compose up -d master caddy backup
 
 if [[ "$install_local_node" == 1 ]]; then
 	echo "[7/8] enrolling the local VPN node"
+	node_address="${HONEY_NODE_ADDRESS:-}"
+	if [[ -z "$node_address" ]]; then
+		node_address="$(curl -4fsSL --retry 3 --connect-timeout 10 \
+			https://api.ipify.org 2>/dev/null || true)"
+	fi
+	if [[ -z "$node_address" || "$node_address" == 127.* || "$node_address" == localhost ]]; then
+		echo "could not determine a public node address; set HONEY_NODE_ADDRESS and retry" >&2
+		exit 1
+	fi
 	api_dir="$runtime_tmp/api"
 	install -d -m 0700 "$api_dir"
 	cookie_jar="$api_dir/cookies"
@@ -353,10 +363,10 @@ PY
 		http://127.0.0.1:8080/auth/login >/dev/null
 	rm -f "$api_dir/login.json" "$runtime_tmp/admin_password"
 	local_name="local-$(hostname -s | tr -cs 'A-Za-z0-9._-' '-')"
-	NODE_NAME="$local_name" python3 - "$api_dir/node.json" <<'PY'
+	NODE_NAME="$local_name" NODE_ADDRESS="$node_address" python3 - "$api_dir/node.json" <<'PY'
 import json, os, sys
 with open(sys.argv[1], "w", encoding="utf-8") as handle:
-    json.dump({"name": os.environ["NODE_NAME"], "address": "127.0.0.1",
+    json.dump({"name": os.environ["NODE_NAME"], "address": os.environ["NODE_ADDRESS"],
                "transport": "serve", "grpc_port": 8443,
                "tls_server_name": "honey-agent", "monthly_cost_cents": 0}, handle)
 PY

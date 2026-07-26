@@ -201,6 +201,7 @@
     selection: { nodes: new Set(), users: new Set(), inbounds: new Set() },
     settings: null, branding: null, customRoles: [],
     userWiz: null,
+    resultReturnRoute: "",
     issueReport: { counts: { total: 0, critical: 0, warning: 0, info: 0 }, issues: [] },
     issueFilters: { severity: "", kind: "", node: "" },
     savedViews: [],
@@ -2390,7 +2391,7 @@
     return {
       editing_id: ib.id, _orig: ib,
       core: ib.core, kind: ib.kind, node_id: ib.node_id,
-      tag: ib.tag || "", port: String(ib.listen_port || ""), flow: ib.flow || "xtls-rprx-vision",
+      tag: ib.tag || "", port: String(ib.listen_port || ""), flow: ib.flow || "",
       happ_name: ib.extra?.happ?.name || "",
       happ_description: ib.extra?.happ?.description || "",
       country_code: ib.extra?.happ?.country_code || "",
@@ -2445,6 +2446,14 @@
     if (!secs.includes(w.security)) w.security = secs[0];
     const nets = wizNetworks(w.core, w.security);
     if (!nets.includes(w.network)) w.network = nets[0];
+    if (w.kind !== "vless" || w.network !== "tcp" || w.security === "none") w.flow = "";
+  }
+  function flowChoices(w) {
+    if (w.kind !== "vless") return [""];
+    if (w.network === "tcp" && (w.security === "tls" || w.security === "reality")) {
+      return ["", "xtls-rprx-vision"];
+    }
+    return [""];
   }
   function repaintWiz() {
     const m = document.getElementById("wiz-body");
@@ -2495,7 +2504,7 @@
         <div class="section-label">CLIENT DISPLAY (HAPP AND OTHER APPS)</div>
         <div class="form-row"><label>${helpLabel("Config name", "The server name shown in Happ instead of the technical user @ node / tag label. Empty keeps the legacy generated name.")}<input data-wiz="happ_name" maxlength="80" value="${esc(w.happ_name)}" placeholder="Poland · Premium"></label><label>${helpLabel("Country code", "Two-letter ISO country code. Honey turns PL into the 🇵🇱 flag prefix in every generated client config.")}<input data-wiz="country_code" maxlength="2" value="${esc(w.country_code)}" placeholder="PL" autocomplete="off"></label></div>
         <label>${helpLabel("Config description", "Optional Happ subtitle shown below this config name. Happ limits it to 30 characters.")}<input data-wiz="happ_description" maxlength="30" value="${esc(w.happ_description)}" placeholder="VLESS · low latency"></label>
-        ${w.kind === "vless" ? `<label><span>Flow</span><input data-wiz="flow" value="${esc(w.flow)}" placeholder="xtls-rprx-vision"></label>` : ""}
+        ${w.kind === "vless" ? `<label><span>Flow</span><select data-wiz="flow">${flowChoices(w).map((v) => option(v, v || "default", w.flow)).join("")}</select><p class="form-note">Vision is available only for VLESS over TCP with TLS or REALITY. Leave default for XHTTP.</p></label>` : ""}
         ${w.kind === "hysteria2" ? `<label>${helpLabel("UDP port hopping (optional)", "A comma-separated list or range of UDP ports advertised to compatible clients. Every selected port must reach this node and be forwarded to the inbound listener.")}<input data-wiz="hop_ports" value="${esc(w.hop_ports)}" placeholder="20000-30000"></label>` : ""}
         ${w.kind === "hysteria2" ? `<div class="form-row"><label>${helpLabel("Down speed cap, Mbps", "Traffic shaping: caps download bandwidth for this hysteria2 inbound (drives its congestion control). 0 = unlimited. Use tiered inbounds as speed plans — vless/vmess/trojan cores have no per-inbound speed limiter.")}<input data-wiz="down_mbps" type="number" min="0" max="100000" value="${esc(w.down_mbps)}" placeholder="0"></label><label>${helpLabel("Up speed cap, Mbps", "Caps upload bandwidth for this hysteria2 inbound. 0 = unlimited.")}<input data-wiz="up_mbps" type="number" min="0" max="100000" value="${esc(w.up_mbps)}" placeholder="0"></label></div>` : ""}
         ${w.core !== "xray" ? `<label>${helpLabel("Multihop exit (optional)", "Chain this inbound's traffic through another sing-box inbound (the exit), so users enter here and egress from the exit node — e.g. enter in RU, exit abroad. The entry node dials the exit with a dedicated credential; both must be sing-box.")}<select data-wiz="upstream_inbound_id">${multihopExitOptions(w)}</select></label>` : ""}
@@ -2743,7 +2752,7 @@
           const result = await api("/users", { method: "POST", body: JSON.stringify({ username: `${prefix}${suffix}`, password: pass, subscription_title: title, subscription_description: description, traffic_limit_bytes: traffic, expires_at: days ? new Date(Date.now() + days * 86400000).toISOString() : null, device_limit: device }) });
           rows.push([result.user?.username || `${prefix}${suffix}`, pass, location.origin + result.subscription_path]);
         }
-        showResult("Users created", rows.map((r) => [`${r[0]} · password`, `${r[1]} · ${r[2]}`]));
+        showResult("Users created", rows.map((r) => [`${r[0]} · password`, `${r[1]} · ${r[2]}`]), "users");
       }
       state.userWiz = null;
       await loadData({ quiet: true });
@@ -3175,7 +3184,7 @@
       <label><span>Node</span><select name="node_id" ${editing ? "disabled" : ""}>${state.nodes.map((node) => option(node.id, node.name, entity?.node_id || state.nodes[0]?.id)).join("")}</select></label>
       <div class="form-row"><label><span>Tag</span><input name="tag" value="${esc(entity?.tag || "")}" required placeholder="vless-in"></label><label><span>Port</span><input name="listen_port" type="number" min="1" max="65535" value="${esc(entity?.listen_port || "")}" required placeholder="443"></label></div>
       <div class="form-row"><label><span>Protocol</span><select name="kind">${["vless","hysteria2","vmess","trojan","shadowsocks","tuic","anytls","shadowtls"].map((v) => option(v,v,entity?.kind || "vless")).join("")}</select></label><label><span>Core</span><select name="core">${option("singbox","sing-box",entity?.core || "singbox")}${option("xray","xray",entity?.core || "singbox")}</select></label></div>
-      <div class="form-row"><label><span>Flow</span><input name="flow" value="${esc(entity?.flow || "")}" placeholder="xtls-rprx-vision"></label><label><span>Enabled</span><select name="enabled">${option("true","on",String(entity?.enabled ?? true))}${option("false","off",String(entity?.enabled ?? true))}</select></label></div>
+      <div class="form-row"><label><span>Flow</span><select name="flow">${["", "xtls-rprx-vision"].map((v) => option(v, v || "default", entity?.flow || "")).join("")}</select></label><label><span>Enabled</span><select name="enabled">${option("true","on",String(entity?.enabled ?? true))}${option("false","off",String(entity?.enabled ?? true))}</select></label></div>
       <div class="form-row"><label><span>TLS</span><select name="tls_enabled">${option("false","off",String(entity?.tls_enabled ?? false))}${option("true","on",String(entity?.tls_enabled ?? false))}</select></label><label><span>Server name</span><input name="server_name" value="${esc(entity?.server_name || "")}" placeholder="vpn.example.com"></label></div>
       <div class="form-row"><label><span>Certificate path</span><input name="cert_path" value="${esc(entity?.cert_path || "")}" placeholder="/etc/letsencrypt/fullchain.pem"></label><label><span>Key path</span><input name="key_path" value="${esc(entity?.key_path || "")}" placeholder="/etc/letsencrypt/privkey.pem"></label></div>
       <div class="form-row"><label><span>REALITY</span><select name="reality">${option("false","off",String(entity?.reality ?? false))}${option("true","on",String(entity?.reality ?? false))}</select></label><label><span>Private key</span><input name="reality_private_key" type="password" placeholder="${editing ? "leave unchanged" : "required for reality"}"></label></div>
@@ -3255,7 +3264,9 @@
       toast(`${kind} ${editing ? "saved" : "added"}`);
       await loadData({ quiet: true });
       if (!editing && kind === "user" && result.subscription_path) {
-        showResult("User created", [["UUID", result.uuid], ["Subscription", location.origin + result.subscription_path]]);
+        showResult("User created", [["UUID", result.uuid], ["Subscription", location.origin + result.subscription_path]], "users");
+      } else if (!editing) {
+        go(kind === "node" ? "nodes" : kind === "inbound" ? "inbounds" : "users");
       }
     } catch (error) {
       errorNode.textContent = error.message;
@@ -3264,11 +3275,12 @@
     }
   }
 
-  function showResult(title, rows) {
+  function showResult(title, rows, returnRoute = "") {
     $("#form-eyebrow").textContent = "shown once";
     $("#form-title").textContent = title;
     $("#form-submit").textContent = "Done";
     entityForm.dataset.kind = "result";
+    state.resultReturnRoute = returnRoute;
     $("#form-body").innerHTML = `<p class="form-note">Copy these values now. Sensitive tokens are not returned by list endpoints.</p>${rows.filter(([, value]) => value).map(([label, value]) => `<label><span>${esc(label)}</span><div style="display:flex;gap:7px"><input readonly value="${esc(value)}"><button type="button" class="button secondary" data-copy="${esc(value)}">${icon("copy")}</button></div></label>`).join("")}`;
     formDialog.showModal();
   }
@@ -4497,7 +4509,12 @@
       formDialog.close();
       return;
     }
-    if (entityForm.dataset.kind === "result") formDialog.close();
+    if (entityForm.dataset.kind === "result") {
+      formDialog.close();
+      const route = state.resultReturnRoute;
+      state.resultReturnRoute = "";
+      if (route) go(route);
+    }
     else submitEntity();
   });
   document.addEventListener("submit", (event) => {

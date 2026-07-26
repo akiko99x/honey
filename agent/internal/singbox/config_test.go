@@ -162,6 +162,30 @@ func TestBuildConfig_RejectsXrayOnlyTransport(t *testing.T) {
 	}
 }
 
+func TestBuildConfig_TUICIncludesUUIDAndPassword(t *testing.T) {
+	raw, err := BuildConfig(core.Spec{Inbounds: []core.Inbound{{
+		Tag: "tuic-in", Type: "tuic", Port: 2055,
+		Users: []core.User{{
+			Name: "alice", UUID: "11111111-1111-1111-1111-111111111111",
+			Password: "secret",
+		}},
+		TLS: &core.TLS{Enabled: true, ServerName: "example.com"},
+	}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var cfg map[string]any
+	if err := json.Unmarshal(raw, &cfg); err != nil {
+		t.Fatal(err)
+	}
+	inbound := cfg["inbounds"].([]any)[0].(map[string]any)
+	user := inbound["users"].([]any)[0].(map[string]any)
+	if user["uuid"] != "11111111-1111-1111-1111-111111111111" ||
+		user["password"] != "secret" {
+		t.Fatalf("unexpected TUIC user: %#v", user)
+	}
+}
+
 func TestGeneratedRealityConfigWithInstalledSingBox(t *testing.T) {
 	bin := os.Getenv("HONEY_SINGBOX_BIN")
 	if bin == "" {

@@ -16,7 +16,8 @@ usage: bootstrap.sh [--repo owner/repo] [--version latest|vX.Y.Z]
 Interactive mode asks only for the GitHub repository/release, panel domain and
 path, owner username/password, and optional ACME email.
 Non-interactive mode reads HONEY_PANEL_DOMAIN, HONEY_ADMIN_USERNAME and
-HONEY_ADMIN_PASSWORD (the other HONEY_* variables are optional).
+HONEY_ADMIN_PASSWORD (the other HONEY_* variables are optional). Set
+HONEY_NODE_ADDRESS when automatic public-IP detection is unavailable.
 EOF
 	exit 2
 }
@@ -315,6 +316,15 @@ curl -fsS http://127.0.0.1:8080/health >/dev/null
 
 if ((install_local_node)); then
 	echo "[10/10] enrolling the local VPN node"
+	node_address="${HONEY_NODE_ADDRESS:-}"
+	if [[ -z "$node_address" ]]; then
+		node_address="$(curl -4fsSL --retry 3 --connect-timeout 10 \
+			https://api.ipify.org 2>/dev/null || true)"
+	fi
+	if [[ -z "$node_address" || "$node_address" == 127.* || "$node_address" == localhost ]]; then
+		echo "could not determine a public node address; set HONEY_NODE_ADDRESS and retry" >&2
+		exit 1
+	fi
 	api_dir="$work/local-node-api"
 	install -d -m 0700 "$api_dir"
 	cookie_jar="$api_dir/cookies"
@@ -339,7 +349,7 @@ PY
 		http://127.0.0.1:8080/auth/login > "$api_dir/login-response.json"
 
 	local_name="local-$(hostname -s | tr -cs 'A-Za-z0-9._-' '-')"
-	NODE_NAME="$local_name" python3 - "$api_dir/node-create.json" <<'PY'
+	NODE_NAME="$local_name" NODE_ADDRESS="$node_address" python3 - "$api_dir/node-create.json" <<'PY'
 import json
 import os
 import sys
@@ -347,7 +357,7 @@ import sys
 with open(sys.argv[1], "w", encoding="utf-8") as handle:
     json.dump({
         "name": os.environ["NODE_NAME"],
-        "address": "127.0.0.1",
+        "address": os.environ["NODE_ADDRESS"],
         "transport": "serve",
         "grpc_port": 8443,
         "tls_server_name": "honey-agent",

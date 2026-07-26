@@ -79,6 +79,9 @@ whether this host should be the first VPN node. The default selects the latest
 published release; pass `--version vX.Y.Z` to pin one. The completed deployment
 lives in `/opt/honey-docker`; database, certificates, core configs and Caddy
 state live in persistent volumes.
+For local-node enrollment, the installer detects the host's public IPv4; set
+`HONEY_NODE_ADDRESS` explicitly when the host is behind NAT or public-IP
+detection is unavailable.
 
 ```bash
 cd /opt/honey-docker
