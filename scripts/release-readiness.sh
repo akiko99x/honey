@@ -102,8 +102,25 @@ grep -Fq 'agent_config:/etc/honey' deploy/docker/compose.yml ||
 	fail "Docker agent must use a dedicated config volume"
 grep -Fq 'gosu honey' deploy/docker/master-entrypoint.sh ||
 	fail "Docker master entrypoint must drop privileges after reading secrets"
+grep -Fq 'export HONEY_SECRET_KEY=' deploy/docker/master-entrypoint.sh ||
+	fail "Docker master entrypoint must import the root-only encryption key"
+grep -Fq 'unset HONEY_SECRET_KEY_FILE' deploy/docker/master-entrypoint.sh ||
+	fail "Docker master entrypoint must not pass the root-only key path after privilege drop"
 grep -Fq 'gosu openssl' deploy/docker/Dockerfile.master ||
 	fail "Docker master image must include the privilege-drop helper"
+for service in migrate master; do
+	service_block="$(
+		awk -v service="$service" '
+			$0 == "  " service ":" { found = 1; next }
+			found && /^  [a-zA-Z0-9_-]+:$/ { exit }
+			found { print }
+		' deploy/docker/compose.yml
+	)"
+	grep -Fq '      - SETUID' <<<"$service_block" ||
+		fail "Docker $service must retain SETUID to drop privileges"
+	grep -Fq '      - SETGID' <<<"$service_block" ||
+		fail "Docker $service must retain SETGID to drop privileges"
+done
 if grep -Fq -- '--entrypoint /usr/local/bin/gen-certs.sh' scripts/install-docker.sh; then
 	fail "Docker PKI bootstrap must pass through the master entrypoint"
 fi

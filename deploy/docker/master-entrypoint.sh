@@ -31,8 +31,14 @@ if [[ -z "${DATABASE_URL:-}" ]]; then
 	db_host="${HONEY_POSTGRES_HOST:-127.0.0.1}"
 	db_port="${HONEY_POSTGRES_PORT:-5432}"
 	export DATABASE_URL="postgres://honey:$(urlencode "$db_password")@${db_host}:${db_port}/honey"
+	unset db_password
 fi
-export HONEY_SECRET_KEY_FILE="${HONEY_SECRET_KEY_FILE:-/run/secrets/honey_master_key}"
+if [[ -z "${HONEY_SECRET_KEY:-}" ]]; then
+	export HONEY_SECRET_KEY="$(
+		read_secret "${HONEY_SECRET_KEY_FILE:-/run/secrets/honey_master_key}"
+	)"
+fi
+unset HONEY_SECRET_KEY_FILE
 export HONEY_CERTS_DIR="${HONEY_CERTS_DIR:-/etc/honey/master-certs}"
 if [[ -n "${HONEY_ADMIN_PASSWORD_FILE:-}" ]]; then
 	export HONEY_ADMIN_PASSWORD="$(read_secret "$HONEY_ADMIN_PASSWORD_FILE")"

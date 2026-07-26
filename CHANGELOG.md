@@ -5,6 +5,17 @@ version tags and is currently pre-stable.
 
 ## [Unreleased]
 
+## [0.0.8] - 2026-07-26
+
+### Fixed
+
+- Docker master and migration containers retain only `SETUID` and `SETGID`
+  while starting so the entrypoint can drop from root to the unprivileged
+  `honey` account after reading root-only Compose secrets.
+- The Docker master entrypoint now imports the root-only at-rest encryption
+  key before dropping privileges instead of passing its unreadable file path
+  to the `honey` process.
+
 ## [0.0.7] - 2026-07-26
 
 ### Fixed
@@ -111,7 +122,8 @@ version tags and is currently pre-stable.
 - GitHub Actions for tests, database recovery, secret scanning and release
   packaging.
 
-[Unreleased]: https://github.com/akiko99x/honey/compare/v0.0.7...HEAD
+[Unreleased]: https://github.com/akiko99x/honey/compare/v0.0.8...HEAD
+[0.0.8]: https://github.com/akiko99x/honey/compare/v0.0.7...v0.0.8
 [0.0.7]: https://github.com/akiko99x/honey/compare/v0.0.6...v0.0.7
 [0.0.6]: https://github.com/akiko99x/honey/compare/v0.0.5...v0.0.6
 [0.0.5]: https://github.com/akiko99x/honey/compare/v0.0.4...v0.0.5
