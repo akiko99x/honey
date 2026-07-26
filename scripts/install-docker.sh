@@ -317,7 +317,7 @@ docker compose run --rm migrate
 
 echo "[5/8] creating master PKI and owner"
 docker compose run --rm --no-deps \
-	--entrypoint /usr/local/bin/gen-certs.sh master \
+	master /usr/local/bin/gen-certs.sh \
 	bootstrap-local 127.0.0.1 /etc/honey/master-certs
 printf '%s\n' "$admin_password" >"$runtime_tmp/admin_password"
 chmod 0600 "$runtime_tmp/admin_password"

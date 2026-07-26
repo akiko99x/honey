@@ -100,6 +100,13 @@ grep -Fq 'master_config:/etc/honey' deploy/docker/compose.yml ||
 	fail "Docker master must use a dedicated config volume"
 grep -Fq 'agent_config:/etc/honey' deploy/docker/compose.yml ||
 	fail "Docker agent must use a dedicated config volume"
+grep -Fq 'gosu honey' deploy/docker/master-entrypoint.sh ||
+	fail "Docker master entrypoint must drop privileges after reading secrets"
+grep -Fq 'gosu openssl' deploy/docker/Dockerfile.master ||
+	fail "Docker master image must include the privilege-drop helper"
+if grep -Fq -- '--entrypoint /usr/local/bin/gen-certs.sh' scripts/install-docker.sh; then
+	fail "Docker PKI bootstrap must pass through the master entrypoint"
+fi
 if grep -Eq '/var/run/docker\.sock|/run/docker\.sock' deploy/docker/compose.yml; then
 	fail "Docker socket must not be mounted into honey services"
 fi

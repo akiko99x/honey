@@ -14,7 +14,7 @@ LABEL org.opencontainers.image.source="https://github.com/akiko99x/honey" \
       org.opencontainers.image.description="honey control plane"
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
-       bash ca-certificates curl openssl \
+       bash ca-certificates curl gosu openssl \
     && rm -rf /var/lib/apt/lists/* \
     && groupadd --gid 10001 honey \
     && useradd --uid 10001 --gid honey --home-dir /var/lib/honey \
@@ -30,7 +30,6 @@ COPY deploy/docker/master-entrypoint.sh /usr/local/bin/honey-master-entrypoint
 RUN chmod 0755 /usr/local/bin/honey-master /usr/local/bin/gen-certs.sh \
     /usr/local/bin/honey-master-entrypoint
 
-USER honey
 WORKDIR /var/lib/honey
 ENTRYPOINT ["/usr/local/bin/honey-master-entrypoint"]
 CMD ["run", "--api-listen", "127.0.0.1:8080", "--dial-listen", "0.0.0.0:9443"]

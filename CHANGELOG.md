@@ -5,6 +5,15 @@ version tags and is currently pre-stable.
 
 ## [Unreleased]
 
+## [0.0.7] - 2026-07-26
+
+### Fixed
+
+- Docker master and migration containers read root-only Compose secret files
+  before dropping to the unprivileged `honey` account.
+- Docker PKI bootstrap now runs through the privilege-dropping master
+  entrypoint so named-volume files remain owned by `honey`.
+
 ## [0.0.6] - 2026-07-26
 
 ### Added
@@ -102,7 +111,8 @@ version tags and is currently pre-stable.
 - GitHub Actions for tests, database recovery, secret scanning and release
   packaging.
 
-[Unreleased]: https://github.com/akiko99x/honey/compare/v0.0.6...HEAD
+[Unreleased]: https://github.com/akiko99x/honey/compare/v0.0.7...HEAD
+[0.0.7]: https://github.com/akiko99x/honey/compare/v0.0.6...v0.0.7
 [0.0.6]: https://github.com/akiko99x/honey/compare/v0.0.5...v0.0.6
 [0.0.5]: https://github.com/akiko99x/honey/compare/v0.0.4...v0.0.5
 [0.0.4]: https://github.com/akiko99x/honey/compare/v0.0.3...v0.0.4

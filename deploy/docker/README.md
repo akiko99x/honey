@@ -71,6 +71,10 @@ ports are part of the node runtime. The other long-running services run without
 these capabilities. Master and agent configuration volumes are separate, so
 the node container cannot read the master CA private key.
 
+The master container entrypoint starts as root only long enough to read
+root-owned Compose secrets, then uses `gosu` before invoking `honey-master` or
+release helpers. The application and migrations run as the `honey` user.
+
 ## Legacy migration
 
 Do not start this Compose stack alongside an active systemd honey deployment:

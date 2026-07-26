@@ -76,6 +76,8 @@ proxies sing-box challenges to `127.0.0.1:9082`.
 ## Security notes
 
 - Compose secrets are mounted from root-only files.
+- The master entrypoint reads those files before dropping to the unprivileged
+  `honey` account; the Rust process and migration command never run as root.
 - Master and agent use separate config/state volumes; the agent cannot read the
   master CA private key.
 - Master and Caddy use read-only root filesystems with writable volumes/tmpfs.

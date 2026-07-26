@@ -41,7 +41,25 @@ fi
 if (($# == 0)); then
 	set -- run --api-listen 127.0.0.1:8080 --dial-listen 0.0.0.0:9443
 fi
-if [[ "$1" == "honey-master" ]]; then
+
+run_as_honey() {
+	if [[ "$(id -u)" -eq 0 ]]; then
+		exec gosu honey "$@"
+	fi
+	exec "$@"
+}
+
+case "$1" in
+honey-master)
 	shift
-fi
-exec /usr/local/bin/honey-master "$@"
+	run_as_honey /usr/local/bin/honey-master "$@"
+	;;
+ping|migrate|keygen|reencrypt|rekey|admin|domain|push|serve|dial|run)
+	run_as_honey /usr/local/bin/honey-master "$@"
+	;;
+*)
+	# Release helpers such as gen-certs are explicit commands. They still run
+	# as honey so named-volume files never become root-owned.
+	run_as_honey "$@"
+	;;
+esac
