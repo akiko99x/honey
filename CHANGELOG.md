@@ -5,6 +5,14 @@ version tags and is currently pre-stable.
 
 ## [Unreleased]
 
+## [0.0.12] - 2026-07-26
+
+### Fixed
+
+- Restored Happ one-tap subscription imports.
+- Improved VLESS XHTTP compatibility with packet-up defaults.
+- Clarified UDP inbound status reporting.
+
 ## [0.0.11] - 2026-07-26
 
 ### Fixed
@@ -157,7 +165,8 @@ version tags and is currently pre-stable.
 - GitHub Actions for tests, database recovery, secret scanning and release
   packaging.
 
-[Unreleased]: https://github.com/akiko99x/honey/compare/v0.0.11...HEAD
+[Unreleased]: https://github.com/akiko99x/honey/compare/v0.0.12...HEAD
+[0.0.12]: https://github.com/akiko99x/honey/compare/v0.0.11...v0.0.12
 [0.0.11]: https://github.com/akiko99x/honey/compare/v0.0.10...v0.0.11
 [0.0.10]: https://github.com/akiko99x/honey/compare/v0.0.9...v0.0.10
 [0.0.9]: https://github.com/akiko99x/honey/compare/v0.0.8...v0.0.9

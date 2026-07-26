@@ -2,7 +2,7 @@
     "openapi":  "3.0.3",
     "info":  {
                  "title":  "honey master API",
-                 "version":  "0.0.11",
+                 "version":  "0.0.12",
                  "description":  "Stable automation surface for honey. Create a named key in Settings, store the hny_ token once, and send it as Authorization: Bearer \u003ctoken\u003e. API keys use the same owner/admin/operator/viewer permission ladder as panel accounts."
              },
     "servers":  [
