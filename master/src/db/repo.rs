@@ -1495,6 +1495,12 @@ pub async fn get_user_by_subscription_token(pool: &PgPool, token: Uuid) -> Resul
     )? {
         return Ok(Some(user));
     }
+    // v0.1 permanent links use the immutable user row UUID. Rotating the
+    // optional revocable token or protocol credentials never invalidates this
+    // URL, while legacy hashed-token links remain valid above.
+    if let Some(user) = get_user(pool, token).await? {
+        return Ok(Some(user));
+    }
     // Multi-sub: resolve the owning user and use the independently named link
     // as the client-facing profile title.
     let named: Option<(Uuid, String)> =
@@ -1617,8 +1623,8 @@ pub async fn create_user(
         "INSERT INTO users
            (username, uuid, password, subscription_token_hash, subscription_token_enc,
             traffic_limit_bytes, expires_at, created_by, device_limit, subscription_title,
-            subscription_description)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING *",
+            subscription_description, subscription_group, subscription_traffic_policy)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13) RETURNING *",
     )
     .bind(user.username)
     .bind(uuid)
@@ -1631,6 +1637,8 @@ pub async fn create_user(
     .bind(user.device_limit.max(0))
     .bind(user.subscription_title)
     .bind(user.subscription_description)
+    .bind(user.subscription_group)
+    .bind(user.subscription_traffic_policy)
     .fetch_one(&mut *tx)
     .await?;
     // owner/admin-created users join the default group (their old universal-ish
@@ -1654,6 +1662,7 @@ pub async fn update_user(pool: &PgPool, id: Uuid, user: UpdateUser) -> Result<Op
     let (expires_set, expires_at) = patch_parts(user.expires_at);
     let (title_set, subscription_title) = patch_parts(user.subscription_title);
     let (description_set, subscription_description) = patch_parts(user.subscription_description);
+    let (group_set, subscription_group) = patch_parts(user.subscription_group);
     let password = user.password.as_deref().map(secret::encrypt).transpose()?;
     decrypt_opt_user(
         sqlx::query_as(
@@ -1664,6 +1673,8 @@ pub async fn update_user(pool: &PgPool, id: Uuid, user: UpdateUser) -> Result<Op
            device_limit = COALESCE($8, device_limit),
            subscription_title = CASE WHEN $9 THEN $10 ELSE subscription_title END
            ,subscription_description = CASE WHEN $11 THEN $12 ELSE subscription_description END
+           ,subscription_group = CASE WHEN $13 THEN $14 ELSE subscription_group END
+           ,subscription_traffic_policy = COALESCE($15, subscription_traffic_policy)
          WHERE id = $1 RETURNING *",
         )
         .bind(id)
@@ -1678,6 +1689,9 @@ pub async fn update_user(pool: &PgPool, id: Uuid, user: UpdateUser) -> Result<Op
         .bind(subscription_title)
         .bind(description_set)
         .bind(subscription_description)
+        .bind(group_set)
+        .bind(subscription_group)
+        .bind(user.subscription_traffic_policy)
         .fetch_optional(pool)
         .await?,
     )

@@ -758,6 +758,12 @@ pub struct User {
     /// Client-facing subscription description/announcement.
     #[serde(default)]
     pub subscription_description: Option<String>,
+    /// Optional client-facing subscription group/category.
+    #[serde(default)]
+    pub subscription_group: Option<String>,
+    /// inherit | auto | always | never. "inherit" resolves through app settings.
+    #[serde(default = "default_subscription_traffic_policy")]
+    pub subscription_traffic_policy: String,
     #[serde(default)]
     pub labels: Vec<String>,
     // vless/vmess credential; stored encrypted at rest (text), plaintext in memory.
@@ -790,6 +796,10 @@ pub struct User {
 
 fn default_quota_interval() -> String {
     "none".to_string()
+}
+
+fn default_subscription_traffic_policy() -> String {
+    "inherit".to_string()
 }
 
 impl User {
@@ -1152,6 +1162,10 @@ pub struct NewUser {
     #[serde(default)]
     pub subscription_description: Option<String>,
     #[serde(default)]
+    pub subscription_group: Option<String>,
+    #[serde(default = "default_subscription_traffic_policy")]
+    pub subscription_traffic_policy: String,
+    #[serde(default)]
     pub traffic_limit_bytes: i64,
     #[serde(default)]
     pub expires_at: Option<DateTime<Utc>>,
@@ -1167,6 +1181,10 @@ pub struct UpdateUser {
     pub subscription_title: Patch<String>,
     #[serde(default)]
     pub subscription_description: Patch<String>,
+    #[serde(default)]
+    pub subscription_group: Patch<String>,
+    #[serde(default)]
+    pub subscription_traffic_policy: Option<String>,
     pub enabled: Option<bool>,
     pub traffic_limit_bytes: Option<i64>,
     #[serde(default)]

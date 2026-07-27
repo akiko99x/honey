@@ -315,20 +315,30 @@ pub fn clash_config(
             proxies.push(proxy);
         }
     }
+    let group_name = user
+        .subscription_group
+        .as_deref()
+        .filter(|value| !value.trim().is_empty())
+        .unwrap_or("Proxy");
+    let auto_name = if group_name == "Auto" {
+        "Auto latency"
+    } else {
+        "Auto"
+    };
     let auto = json!({
-        "name": "Auto", "type": "url-test", "proxies": names.clone(),
+        "name": auto_name, "type": "url-test", "proxies": names.clone(),
         "url": "https://www.gstatic.com/generate_204", "interval": 300
     });
-    let mut select = vec![json!("Auto")];
+    let mut select = vec![json!(auto_name)];
     select.extend(names.iter().map(|n| json!(n)));
     let groups = if names.is_empty() {
         json!([])
     } else {
-        json!([{"name": "Proxy", "type": "select", "proxies": select}, auto])
+        json!([{"name": group_name, "type": "select", "proxies": select}, auto])
     };
     let final_proxy = profile.map(|p| p.final_proxy).unwrap_or(true);
     let target = if !names.is_empty() && final_proxy {
-        "Proxy"
+        group_name
     } else {
         "DIRECT"
     };
@@ -1055,7 +1065,7 @@ fn client_label(user: &User, endpoint: &SubscriptionEndpoint) -> String {
     client_label_with_fallback(endpoint, &fallback)
 }
 
-fn client_label_from_endpoint(endpoint: &SubscriptionEndpoint) -> String {
+pub fn client_label_from_endpoint(endpoint: &SubscriptionEndpoint) -> String {
     let fallback = format!("{}-{}", endpoint.node_name, endpoint.tag);
     client_label_with_fallback(endpoint, &fallback)
 }
@@ -1101,6 +1111,8 @@ mod tests {
             username: "alice".into(),
             subscription_title: None,
             subscription_description: None,
+            subscription_group: None,
+            subscription_traffic_policy: "auto".into(),
             labels: vec![],
             uuid: Uuid::new_v4().to_string(),
             password: "secret".into(),

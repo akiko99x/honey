@@ -867,7 +867,7 @@
   function renderUserDetail(user) {
     const status = statusPill(user.active ? "ok" : "bad", user.active ? "active" : (user.suppressed_reason || "offline"));
     const section = state.detailSection || "overview";
-    const actions = `<button class="button primary" data-action="rotate-sub" data-id="${user.id}">${icon("link")} New sub</button><button class="button" data-action="edit-user" data-id="${user.id}">Edit</button>`;
+    const actions = `<button class="button primary" data-action="reveal-sub" data-id="${user.id}">${icon("link")} Subscription</button><button class="button" data-action="preview-sub" data-id="${user.id}">Preview</button><button class="button" data-action="edit-user" data-id="${user.id}">Edit</button>`;
     const body = section === "access" ? userAccessSection(user)
       : section === "subscription" ? userSubscriptionSection(user)
       : userOverviewSection(user, status);
@@ -934,21 +934,26 @@
   function userSubscriptionSection(user) {
     const alias = user.subscription_alias;
     const uni = alias ? `${location.origin}/s/${alias}` : "";
+    const permanent = `${location.origin}/sub/${user.id}`;
     return `<div class="detail-main">
         <div class="panel"><div class="panel-title">Subscription</div><div class="prop-list">
           ${prop("State", `<span class="status ${user.active ? "ok" : "bad"}">${user.active ? "available" : "unavailable"}</span>`)}
-          ${prop("Token", "stored, encrypted at rest")}
+          ${prop("Permanent link", `<span class="mono">${esc(permanent)}</span> <button class="row-button" data-copy="${esc(permanent)}">copy</button>`)}
+          ${prop("Revocable token", "optional · stored encrypted at rest")}
           ${prop("Client title", esc(user.subscription_title || user.username))}
+          ${prop("Client group", esc(user.subscription_group || "global default"))}
+          ${prop("Traffic row", esc(user.subscription_traffic_policy || "inherit"))}
           ${prop("Short alias", alias ? `<span class="mono">${esc(alias)}</span>` : "—")}
           ${alias ? prop("Universal link", `<span class="mono">${esc(uni)}</span> <button class="row-button" data-copy="${esc(uni)}">copy</button>`) : ""}
           ${prop("Suppression", esc(user.suppressed_reason || "none"))}
         </div><div class="panel-body"><div class="rail-actions">
-          ${railAction("reveal-sub", user.id, "link", "Reveal current link")}
+          ${railAction("reveal-sub", user.id, "link", "Show permanent link")}
+          ${railAction("preview-sub", user.id, "check", "Preview client profiles")}
           ${railAction("manage-subs", user.id, "link", "Named links (per-device)")}
           ${railAction("set-alias", user.id, "settings", alias ? "Change short alias" : "Set short alias")}
-          ${railAction("rotate-sub", user.id, "refresh", "Rotate (invalidate old)")}
-          ${railAction("rotate-credentials", user.id, "key", "Rotate uuid & password")}
-        </div><p class="form-note" style="margin-top:10px">The universal link (and <code>/s/&lt;alias&gt;</code>) auto-detects the client app and serves the right config. Reveal shows the token link; rotate invalidates the old one.</p></div></div>
+          ${railAction("rotate-sub", user.id, "refresh", "Create/rotate optional revocable link")}
+          ${railAction("rotate-credentials", user.id, "key", "Rotate protocol credentials (optional)")}
+        </div><p class="form-note" style="margin-top:10px">The permanent UUID link remains valid across credential and optional token rotations. Client-specific links apply compatibility presets without changing the server inbound.</p></div></div>
       </div>`;
   }
   async function manageServices(nodeId) {
@@ -1011,6 +1016,29 @@
       <p class="field-error" id="named-sub-err"></p>
       <p class="form-note">Revoking a named link invalidates only that token; other links and the primary subscription keep working.</p>
     </div>`);
+  }
+  async function previewSubscription(id) {
+    const clients = ["happ-android", "happ-desktop", "karing", "generic"];
+    try {
+      const previews = await Promise.all(clients.map((client) => api(`/users/${id}/subscription-preview?client=${encodeURIComponent(client)}`)));
+      const cards = previews.map((preview) => {
+        const url = location.origin + preview.profile_path;
+        const endpoints = (preview.endpoints || []).map((endpoint) =>
+          `<div class="check-row"><span><b>${esc(endpoint.name)}</b><small>${esc(endpoint.protocol)} · ${esc(endpoint.network || "tcp")}${endpoint.xhttp_mode ? ` · ${esc(endpoint.xhttp_mode)}` : ""}${endpoint.fingerprint ? ` · fp ${esc(endpoint.fingerprint)}` : ""}${endpoint.warning ? ` · ${esc(endpoint.warning)}` : ""}</small></span></div>`
+        ).join("");
+        return `<div class="panel" style="margin-bottom:12px"><div class="panel-title">${esc(preview.client)}</div><div class="panel-body">
+          <div class="prop-list">
+            ${prop("Title", esc(preview.title || ""))}
+            ${prop("Group", esc(preview.group || "—"))}
+            ${prop("Traffic header", preview.traffic_header ? "shown" : "hidden")}
+            ${prop("Update interval", `${preview.profile_update_interval_hours} h`)}
+            ${prop("Profile URL", `<span class="mono">${esc(url)}</span> <button class="row-button" data-copy="${esc(url)}">copy</button>`)}
+          </div>
+          <div class="check-list" style="margin-top:10px">${endpoints || '<p class="form-note">No accessible endpoints.</p>'}</div>
+        </div></div>`;
+      }).join("");
+      showList("Subscription preview", `<div class="form-body">${cards}<p class="form-note">Preview applies client-side compatibility overrides only; server inbounds are unchanged.</p></div>`);
+    } catch (error) { toast(error.message, true); }
   }
   function manageAlias(id) {
     const user = state.users.find((u) => u.id === id);
@@ -2699,6 +2727,8 @@
       password: "",
       subscription_title: user?.subscription_title || "",
       subscription_description: user?.subscription_description || "",
+      subscription_group: user?.subscription_group || "",
+      subscription_traffic_policy: user?.subscription_traffic_policy || "inherit",
       traffic_gb: user ? Number(user.traffic_limit_bytes || 0) / 1024 ** 3 : 0,
       expires_days: user ? expiryDays(user.expires_at) : 0,
       device_limit: user?.device_limit || 0,
@@ -2716,8 +2746,9 @@
       <div class="panel wiz-panel"><div class="form-body">
         <label><span>Username</span><input id="uw-username" value="${esc(w.username)}" placeholder="alice" ${editing ? "" : "required"}></label>
         ${editing ? "" : `<label><span>Password</span><div class="form-row"><input id="uw-password" type="text" value="${esc(w.password)}" placeholder="click Generate or type your own"><button class="button secondary" data-action="generate-wiz-password">Generate</button></div></label>`}
-        <div class="form-row"><label><span>Subscription title</span><input id="uw-title" maxlength="25" value="${esc(w.subscription_title)}" placeholder="global default"></label><label><span>Device limit</span><input id="uw-devices" type="number" min="0" value="${w.device_limit}"></label></div>
+        <div class="form-row"><label><span>Subscription title</span><input id="uw-title" maxlength="25" value="${esc(w.subscription_title)}" placeholder="global default"></label><label><span>Client group</span><input id="uw-group" maxlength="40" value="${esc(w.subscription_group)}" placeholder="global default"></label></div>
         <label><span>Subscription description</span><textarea id="uw-description" maxlength="200" rows="3" placeholder="Traffic: {TRAFFIC_SPENT} · left: {DAYS_LEFT}">${esc(w.subscription_description)}</textarea></label>
+        <div class="form-row"><label><span>Traffic row in clients</span><select id="uw-traffic-policy">${["inherit","auto","always","never"].map((v) => option(v, v, w.subscription_traffic_policy)).join("")}</select></label><label><span>Device limit</span><input id="uw-devices" type="number" min="0" value="${w.device_limit}"></label></div>
         <div class="form-row"><label><span>Traffic limit, GB</span><input id="uw-traffic" type="number" min="0" step=".01" value="${w.traffic_gb}"></label><label><span>Expires in, days</span><input id="uw-expires" type="number" min="0" step="1" value="${w.expires_days}"></label></div>
         ${editing ? `<label><span>Enabled</span><select id="uw-enabled">${option("true","on",String(w.enabled))}${option("false","off",String(w.enabled))}</select></label>` : `
         <div class="section-label">BULK CREATION</div>
@@ -2745,6 +2776,8 @@
     const password = document.getElementById("uw-password")?.value || "";
     const title = document.getElementById("uw-title")?.value.trim() || null;
     const description = document.getElementById("uw-description")?.value.trim() || null;
+    const group = document.getElementById("uw-group")?.value.trim() || null;
+    const trafficPolicy = document.getElementById("uw-traffic-policy")?.value || "inherit";
     const days = Number(document.getElementById("uw-expires")?.value || 0);
     const traffic = Math.round(Number(document.getElementById("uw-traffic")?.value || 0) * 1024 ** 3);
     const device = Math.max(0, Math.round(Number(document.getElementById("uw-devices")?.value || 0)));
@@ -2752,7 +2785,7 @@
     if (!Number.isInteger(days) || days < 0) { err.textContent = "expiry must be a whole number"; return; }
     try {
       if (w.editing_id) {
-        await api(`/users/${w.editing_id}`, { method: "PATCH", body: JSON.stringify({ username, subscription_title: title, subscription_description: description, traffic_limit_bytes: traffic, expires_at: days ? new Date(Date.now() + days * 86400000).toISOString() : null, device_limit: device, enabled: document.getElementById("uw-enabled").value === "true" }) });
+        await api(`/users/${w.editing_id}`, { method: "PATCH", body: JSON.stringify({ username, subscription_title: title, subscription_description: description, subscription_group: group, subscription_traffic_policy: trafficPolicy, traffic_limit_bytes: traffic, expires_at: days ? new Date(Date.now() + days * 86400000).toISOString() : null, device_limit: device, enabled: document.getElementById("uw-enabled").value === "true" }) });
         toast("user saved");
       } else {
         const count = Math.max(1, Math.min(100, Number(document.getElementById("uw-count")?.value || 1)));
@@ -2761,10 +2794,15 @@
         for (let i = 0; i < count; i++) {
           const suffix = count > 1 ? `-${Math.random().toString(36).slice(2, 8)}` : "";
           const pass = count > 1 || !password ? (() => { generateWizardPassword(); return document.getElementById("uw-password").value; })() : password;
-          const result = await api("/users", { method: "POST", body: JSON.stringify({ username: `${prefix}${suffix}`, password: pass, subscription_title: title, subscription_description: description, traffic_limit_bytes: traffic, expires_at: days ? new Date(Date.now() + days * 86400000).toISOString() : null, device_limit: device }) });
-          rows.push([result.user?.username || `${prefix}${suffix}`, pass, location.origin + result.subscription_path]);
+          const result = await api("/users", { method: "POST", body: JSON.stringify({ username: `${prefix}${suffix}`, password: pass, subscription_title: title, subscription_description: description, subscription_group: group, subscription_traffic_policy: trafficPolicy, traffic_limit_bytes: traffic, expires_at: days ? new Date(Date.now() + days * 86400000).toISOString() : null, device_limit: device }) });
+          const createdUsername = result.user?.username || `${prefix}${suffix}`;
+          rows.push([createdUsername, pass, `${createdUsername}:${pass}`, location.origin + result.subscription_path]);
         }
-        showResult("Users created", rows.map((r) => [`${r[0]} · password`, `${r[1]} · ${r[2]}`]), "users");
+        showResult("Users created", rows.flatMap((r) => [
+          [`${r[0]} · password`, r[1]],
+          [`${r[0]} · Hysteria2 auth`, r[2]],
+          [`${r[0]} · subscription`, r[3]],
+        ]), "users");
       }
       state.userWiz = null;
       await loadData({ quiet: true });
@@ -2956,7 +2994,8 @@
         rows: `
           <div class="setting-row"><div class="setting-copy"><b>Panel origin</b><span>Allowed by the panel_domains Host + path allowlist.</span></div><code class="code-value">${esc(location.origin + basePath)}</code></div>
           <div class="setting-row"><div class="setting-copy"><b>Signed in</b><span>HttpOnly session · ${esc(state.admin?.role || "unknown")} role.</span></div><button class="button secondary" data-action="logout">${icon("key")} Sign out ${esc(state.admin?.username || "")}</button></div>
-          ${owner ? `<div class="setting-row"><div class="setting-copy"><b>Runtime settings</b><span>Reconcile cadence, retention, inbound defaults and public subscription protection — edited live.</span></div><button class="button secondary" data-action="manage-settings">${icon("settings")} Configure</button></div>` : ""}
+          ${owner ? `<div class="setting-row"><div class="setting-copy"><b>Runtime settings</b><span>Reconcile cadence, retention, inbound defaults and public subscription protection — edited live.</span></div><button class="button secondary" data-action="manage-settings">${icon("settings")} Configure</button></div>
+          <div class="setting-row"><div class="setting-copy"><b>Subscription appearance</b><span>Global title, description, client group, traffic row and compatibility profiles.</span></div><button class="button secondary" data-action="manage-settings">${icon("link")} Edit subscription</button></div>` : ""}
           <div class="setting-row"><div class="setting-copy"><b>Subscription guard</b><span>${state.settings?.subscription_guard_enabled ? "On" : "Off"} · ${Number(state.settings?.subscription_guard_recent_blocks || 0)} recently blocked.</span></div><span class="status ${state.settings?.subscription_guard_enabled ? "ok" : "warn"}">${state.settings?.subscription_guard_enabled ? "protected" : "disabled"}</span></div>
           <div class="setting-row"><div class="setting-copy"><b>Announcements</b><span>Broadcast a banner on subscription pages and the public status page.</span></div><button class="button secondary" data-action="manage-announcements">${icon("globe")} Manage</button></div>`,
       },
@@ -3160,6 +3199,7 @@
       <label><span>Username</span><input name="username" value="${esc(entity?.username || "")}" required placeholder="alice" autocomplete="off"></label>
       <label>${helpLabel("Subscription title", "The profile name shown by Happ and other subscription clients. Empty uses the global default; maximum 25 characters.")}<input name="subscription_title" maxlength="25" value="${esc(entity?.subscription_title || "")}" placeholder="custom title (optional)" autocomplete="off"></label>
       <label>${helpLabel("Subscription description", "Happ announcement text. Supports {DAYS_ELAPSED}, {TRAFFIC_SPENT}, {DAYS_LEFT} and {USERNAME}; maximum 200 characters.")}<textarea name="subscription_description" maxlength="200" rows="3" placeholder="Traffic: {TRAFFIC_SPENT} · left: {DAYS_LEFT}">${esc(entity?.subscription_description || "")}</textarea></label>
+      <div class="form-row"><label><span>Client group</span><input name="subscription_group" maxlength="40" value="${esc(entity?.subscription_group || "")}" placeholder="global default"></label><label><span>Traffic row</span><select name="subscription_traffic_policy">${["inherit","auto","always","never"].map((v) => option(v, v, entity?.subscription_traffic_policy || "inherit")).join("")}</select></label></div>
       ${editing ? "" : '<label><span>Password</span><div class="form-row"><input name="password" type="password" required placeholder="generated or custom" autocomplete="new-password"><button type="button" class="button secondary" data-action="generate-user-password">Generate</button></div></label>'}
       <div class="form-row"><label><span>Traffic limit, GB</span><input name="traffic_limit_gb" type="number" min="0" step=".01" value="${entity ? Number(entity.traffic_limit_bytes || 0) / 1024 ** 3 : 0}"></label><label><span>Expires in, days</span><input name="expires_days" type="number" min="0" step="1" inputmode="numeric" value="${expiryDays(entity?.expires_at)}" required></label></div>
       <div class="form-row"><label>${helpLabel("Device limit", "Max distinct concurrent source IPs (a 'device' = a source address; no first-party client for real HWID). 0 = unlimited. Over the limit raises a Traffic/Device alert; enforcement (closing the newest connections) is a runtime setting.")}<input name="device_limit" type="number" min="0" step="1" inputmode="numeric" value="${Number(entity?.device_limit || 0)}"></label>${editing ? `<label><span>Enabled</span><select name="enabled">${option("true","on",String(entity.enabled))}${option("false","off",String(entity.enabled))}</select></label>` : "<label><span>&nbsp;</span><span class=\"form-note\" style=\"padding-top:9px\">anti-sharing cap</span></label>"}</div>
@@ -3256,6 +3296,8 @@
         username: data.username.trim(),
         subscription_title: data.subscription_title.trim() || null,
         subscription_description: data.subscription_description.trim() || null,
+        subscription_group: data.subscription_group.trim() || null,
+        subscription_traffic_policy: data.subscription_traffic_policy || "inherit",
         traffic_limit_bytes: Math.round(Number(data.traffic_limit_gb || 0) * 1024 ** 3),
         expires_at: expiresDays === 0 ? null : new Date(Date.now() + expiresDays * 86_400_000).toISOString(),
         device_limit: Math.max(0, Math.round(Number(data.device_limit || 0)))
@@ -3424,6 +3466,11 @@
     try {
       const s = await api("/settings");
       state.settings = s;
+      const profiles = s.subscription_client_profiles || {};
+      const profileRow = (key, label) => {
+        const p = profiles[key] || {};
+        return `<div class="form-row"><label><span>${label} · XHTTP mode</span><select id="set-profile-${key}-mode">${["auto","packet-up","stream-up","stream-one"].map((v) => option(v, v, p.xhttp_mode || "auto")).join("")}</select></label><label><span>${label} · fingerprint</span><select id="set-profile-${key}-fp">${["chrome","firefox","safari","ios","android","edge","360","qq","random","randomized"].map((v) => option(v, v, p.fingerprint || "qq")).join("")}</select></label></div>`;
+      };
       showList("Runtime settings", `<div class="form-body">
         <div class="section-label">AUTO-PUSH</div>
         <div class="form-row"><label><span>Automatic configuration delivery</span><select id="set-autopush"><option value="true" ${s.auto_push_enabled !== false ? "selected" : ""}>on</option><option value="false" ${s.auto_push_enabled === false ? "selected" : ""}>off (manual push only)</option></select></label><span class="form-note">When on, changes, quota enforcement, scheduled operations, CDN rotation and drift reconciliation are pushed automatically. Manual node push always works.</span></div>
@@ -3431,9 +3478,17 @@
         <div class="form-row"><label><span>Audit retention, rows</span><input id="set-audit" type="number" min="10" max="5000" value="${s.audit_retention}"></label><label><span>Runtime log lines</span><input id="set-log" type="number" min="10" max="5000" value="${s.runtime_log_limit}"></label></div>
          <div class="form-row"><label><span>Traffic history, days</span><input id="set-traffic-history" type="number" min="7" max="3650" value="${s.traffic_history_days || 180}"></label><span class="form-note">Hourly buckets are retained for this period.</span></div>
         <div class="section-label">PUBLIC SUBSCRIPTIONS</div>
-        <div class="form-row"><label><span>Global subscription title</span><input id="set-sub-title" maxlength="25" value="${esc(s.default_subscription_title || "")}" placeholder="VPN Elusion"></label><label><span>Telegram / support URL</span><input id="set-sub-support" value="${esc(s.subscription_support_url || "")}" placeholder="https://t.me/example"></label></div>
+        <div class="form-row"><label><span>Global subscription title</span><input id="set-sub-title" maxlength="25" value="${esc(s.default_subscription_title || "")}" placeholder="VPN Elusion"></label><label><span>Global client group</span><input id="set-sub-group" maxlength="40" value="${esc(s.default_subscription_group || "")}" placeholder="Premium"></label></div>
         <label><span>Global subscription description</span><textarea id="set-sub-description" maxlength="200" rows="3" placeholder="Traffic: {TRAFFIC_SPENT} · left: {DAYS_LEFT}">${esc(s.default_subscription_description || "")}</textarea></label>
         <p class="form-note">Per-user title and description override these defaults. Supported tags: {USERNAME}, {DAYS_ELAPSED}, {TRAFFIC_SPENT}, {DAYS_LEFT}. Happ receives Telegram as a support button.</p>
+        <div class="form-row"><label><span>Telegram / support URL</span><input id="set-sub-support" value="${esc(s.subscription_support_url || "")}" placeholder="https://t.me/example"></label><label><span>Update interval, hours</span><input id="set-sub-interval" type="number" min="1" max="168" value="${Number(s.profile_update_interval_hours || 12)}"></label></div>
+        <div class="form-row"><label><span>Traffic row default</span><select id="set-sub-traffic-policy">${["auto","always","never"].map((v) => option(v, v, s.subscription_traffic_policy || "auto")).join("")}</select></label><span class="form-note"><b>auto</b> emits traffic metadata only for users with a finite traffic limit.</span></div>
+        <div class="section-label">CLIENT COMPATIBILITY PROFILES</div>
+        ${profileRow("happ-android", "Happ Android")}
+        ${profileRow("happ-desktop", "Happ Desktop")}
+        ${profileRow("karing", "Karing")}
+        ${profileRow("generic", "Generic Xray")}
+        <p class="form-note">Profiles override only generated XHTTP mode and uTLS fingerprint. They do not modify or restart server inbounds.</p>
         <div class="form-row"><label><span>Guard</span><select id="set-sub-guard"><option value="true" ${s.subscription_guard_enabled ? "selected" : ""}>on</option><option value="false" ${!s.subscription_guard_enabled ? "selected" : ""}>off (diagnostic only)</option></select></label><label><span>Requests per window</span><input id="set-sub-max" type="number" min="10" max="10000" value="${s.subscription_guard_max_requests}"></label></div>
         <div class="form-row"><label><span>Window, s</span><input id="set-sub-window" type="number" min="10" max="3600" value="${s.subscription_guard_window_secs}"></label><label><span>Block, s</span><input id="set-sub-block" type="number" min="10" max="86400" value="${s.subscription_guard_block_secs}"></label></div>
         <div class="check-list"><div class="check-row"><span><b>Guard telemetry</b><small>${Number(s.subscription_guard_allowed_total || 0)} allowed · ${Number(s.subscription_guard_blocked_total || 0)} blocked since restart · ${Number(s.subscription_guard_recent_blocks || 0)} recent persisted blocks · ${Number(s.subscription_guard_active_buckets || 0)} active buckets</small></span></div></div>
@@ -3466,6 +3521,13 @@
       default_inbound_core: document.getElementById("set-core").value,
       default_subscription_title: document.getElementById("set-sub-title").value.trim(),
       default_subscription_description: document.getElementById("set-sub-description").value.trim(),
+      default_subscription_group: document.getElementById("set-sub-group").value.trim(),
+      subscription_traffic_policy: document.getElementById("set-sub-traffic-policy").value,
+      profile_update_interval_hours: Number(document.getElementById("set-sub-interval").value),
+      subscription_client_profiles: Object.fromEntries(["happ-android","happ-desktop","karing","generic"].map((key) => [key, {
+        xhttp_mode: document.getElementById(`set-profile-${key}-mode`).value,
+        fingerprint: document.getElementById(`set-profile-${key}-fp`).value,
+      }])),
       subscription_support_url: document.getElementById("set-sub-support").value.trim(),
       subscription_guard_enabled: document.getElementById("set-sub-guard").value === "true",
       subscription_guard_max_requests: Number(document.getElementById("set-sub-max").value),
@@ -4186,8 +4248,11 @@
         await loadData({ quiet: true });
       } else if (action === "reveal-sub") {
         const result = await api(`/users/${id}/subscription`);
-        if (!result.subscription_token) { toast("no stored link — rotate once to make it revealable", true); return; }
-        showResult("Subscription link", [["Subscription", location.origin + result.subscription_path]]);
+        const rows = [["Permanent subscription", location.origin + result.subscription_path]];
+        if (result.revocable_subscription_path) rows.push(["Optional revocable link", location.origin + result.revocable_subscription_path]);
+        showResult("Subscription links", rows);
+      } else if (action === "preview-sub") {
+        return previewSubscription(id);
       } else if (action === "manage-subs") {
         return manageNamedSubs(id);
       } else if (action === "reveal-named-sub") {
@@ -4205,8 +4270,9 @@
         const result = await api(`/users/${id}/subscriptions`, { method: "POST", body: JSON.stringify({ name }) });
         showResult("Named link created", [["Name", result.name], ["Subscription", location.origin + result.subscription_path]]);
       } else if (action === "rotate-sub") {
+        if (!confirm("Create a new optional revocable link? The previous revocable link will stop working; the permanent UUID link remains valid.")) return;
         const result = await api(`/users/${id}/rotate-sub`, { method: "POST" });
-        showResult("Subscription rotated", [["Subscription", location.origin + result.subscription_path]]);
+        showResult("Revocable subscription updated", [["Permanent subscription", `${location.origin}/sub/${id}`], ["Revocable subscription", location.origin + result.subscription_path]]);
       } else if (action === "toggle-node") {
         await api(`/nodes/${id}`, { method: "PATCH", body: JSON.stringify({ enabled: element.dataset.enabled !== "true" }) });
         await loadData({ quiet: true });

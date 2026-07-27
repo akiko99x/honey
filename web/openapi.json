@@ -2,7 +2,7 @@
     "openapi":  "3.0.3",
     "info":  {
                  "title":  "honey master API",
-                 "version":  "0.0.13",
+                 "version":  "0.1.0",
                  "description":  "Stable automation surface for honey. Create a named key in Settings, store the hny_ token once, and send it as Authorization: Bearer \u003ctoken\u003e. API keys use the same owner/admin/operator/viewer permission ladder as panel accounts."
              },
     "servers":  [
@@ -1654,6 +1654,20 @@
                                                                                                   "nullable":  true,
                                                                                                   "maxLength":  200
                                                                                               },
+                                                                       "subscription_group":  {
+                                                                                                  "type":  "string",
+                                                                                                  "nullable":  true,
+                                                                                                  "maxLength":  40
+                                                                                              },
+                                                                       "subscription_traffic_policy":  {
+                                                                                                           "type":  "string",
+                                                                                                           "enum":  [
+                                                                                                                        "inherit",
+                                                                                                                        "auto",
+                                                                                                                        "always",
+                                                                                                                        "never"
+                                                                                                                    ]
+                                                                                                       },
                                                                         "enabled":  {
                                                                                        "type":  "boolean"
                                                                                    },
@@ -1696,6 +1710,21 @@
                                                                                                       "nullable":  true,
                                                                                                       "maxLength":  200
                                                                                                   },
+                                                                           "subscription_group":  {
+                                                                                                      "type":  "string",
+                                                                                                      "nullable":  true,
+                                                                                                      "maxLength":  40
+                                                                                                  },
+                                                                           "subscription_traffic_policy":  {
+                                                                                                               "type":  "string",
+                                                                                                               "enum":  [
+                                                                                                                            "inherit",
+                                                                                                                            "auto",
+                                                                                                                            "always",
+                                                                                                                            "never"
+                                                                                                                        ],
+                                                                                                               "default":  "inherit"
+                                                                                                           },
                                                                            "password":  {
                                                                                            "type":  "string",
                                                                                            "writeOnly":  true

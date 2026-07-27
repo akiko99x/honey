@@ -423,7 +423,10 @@ the exact request schemas when automating those operations.
 | PATCH | `/users/{id}` | edit quota, expiry, device limit, labels and enabled state |
 | DELETE | `/users/{id}` | delete a user |
 | POST | `/users/{id}/reset-traffic` | reset traffic counters |
-| POST | `/users/{id}/rotate` | rotate user credentials/subscription token |
+| GET | `/users/{id}/subscription` | reveal permanent and optional revocable links |
+| GET | `/users/{id}/subscription-preview` | preview effective client metadata and compatibility profiles |
+| POST | `/users/{id}/rotate` | optionally rotate protocol UUID/password credentials |
+| POST | `/users/{id}/rotate-sub` | optionally rotate the revocable subscription token |
 | GET | `/groups` | list groups |
 | POST | `/groups` | create a group |
 

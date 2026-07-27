@@ -10,6 +10,7 @@ use axum::middleware::{self, Next};
 use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post};
 use axum::{Json, Router};
+use base64::Engine;
 use chrono::{DateTime, Duration, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value as JsonValue};
@@ -70,6 +71,10 @@ pub fn router(state: AppState) -> Router {
         .route("/sub/:token", get(subscription_document))
         .route("/sub/:token/links", get(subscription_links))
         .route("/sub/:token/v2ray", get(subscription_v2ray))
+        .route(
+            "/sub/:token/profile/:client",
+            get(subscription_client_profile),
+        )
         .route("/sub/:token/sing-box", get(subscription_singbox))
         .route("/sub/:token/sing-box-tun", get(subscription_singbox_tun))
         .route("/sub/:token/clash", get(subscription_clash))
@@ -283,6 +288,7 @@ pub fn router(state: AppState) -> Router {
         .route("/users/:id/rotate", post(rotate_user_credentials))
         .route("/users/:id/rotate-sub", post(rotate_subscription))
         .route("/users/:id/subscription", get(reveal_subscription))
+        .route("/users/:id/subscription-preview", get(subscription_preview))
         .route(
             "/users/:id/subscriptions",
             get(list_user_subscriptions).post(create_user_subscription),
@@ -2821,6 +2827,8 @@ async fn import_users(
             password,
             subscription_title: None,
             subscription_description: None,
+            subscription_group: None,
+            subscription_traffic_policy: "inherit".into(),
             traffic_limit_bytes: u.traffic_limit_bytes.or(u.data_limit).unwrap_or(0).max(0),
             expires_at,
             device_limit: 0,
@@ -3706,6 +3714,58 @@ async fn subscription_guard_config(pool: &PgPool) -> crate::ratelimit::Subscript
     }
 }
 
+fn default_client_profiles() -> JsonValue {
+    json!({
+        "happ-android": {"xhttp_mode": "packet-up", "fingerprint": "qq"},
+        "happ-desktop": {"xhttp_mode": "auto", "fingerprint": "qq"},
+        "karing": {"xhttp_mode": "auto", "fingerprint": "qq"},
+        "generic": {"xhttp_mode": "auto", "fingerprint": "qq"}
+    })
+}
+
+fn validate_client_profiles(value: &JsonValue) -> Result<(), ApiError> {
+    let object = value
+        .as_object()
+        .ok_or_else(|| ApiError::bad_request("subscription_client_profiles must be an object"))?;
+    for name in ["happ-android", "happ-desktop", "karing", "generic"] {
+        let profile = object
+            .get(name)
+            .and_then(JsonValue::as_object)
+            .ok_or_else(|| ApiError::bad_request(format!("missing client profile '{name}'")))?;
+        let mode = profile
+            .get("xhttp_mode")
+            .and_then(JsonValue::as_str)
+            .unwrap_or("auto");
+        if !matches!(mode, "auto" | "packet-up" | "stream-up" | "stream-one") {
+            return Err(ApiError::bad_request(format!(
+                "invalid xhttp mode for '{name}'"
+            )));
+        }
+        let fingerprint = profile
+            .get("fingerprint")
+            .and_then(JsonValue::as_str)
+            .unwrap_or("qq");
+        if !matches!(
+            fingerprint,
+            "chrome"
+                | "firefox"
+                | "safari"
+                | "ios"
+                | "android"
+                | "edge"
+                | "360"
+                | "qq"
+                | "random"
+                | "randomized"
+        ) {
+            return Err(ApiError::bad_request(format!(
+                "invalid fingerprint for '{name}'"
+            )));
+        }
+    }
+    Ok(())
+}
+
 #[derive(Serialize)]
 struct SettingsView {
     reconcile_secs: i64,
@@ -3716,6 +3776,10 @@ struct SettingsView {
     default_inbound_core: String,
     default_subscription_title: String,
     default_subscription_description: String,
+    default_subscription_group: String,
+    subscription_traffic_policy: String,
+    profile_update_interval_hours: i64,
+    subscription_client_profiles: JsonValue,
     subscription_support_url: String,
     subscription_guard_enabled: bool,
     subscription_guard_max_requests: u32,
@@ -3773,6 +3837,20 @@ async fn get_settings(State(st): State<AppState>) -> Result<Json<SettingsView>, 
             .get("default_subscription_description")
             .cloned()
             .unwrap_or_default(),
+        default_subscription_group: map
+            .get("default_subscription_group")
+            .cloned()
+            .unwrap_or_default(),
+        subscription_traffic_policy: map
+            .get("subscription_traffic_policy")
+            .filter(|v| matches!(v.as_str(), "auto" | "always" | "never"))
+            .cloned()
+            .unwrap_or_else(|| "auto".to_string()),
+        profile_update_interval_hours: int("profile_update_interval_hours", 12).clamp(1, 168),
+        subscription_client_profiles: map
+            .get("subscription_client_profiles")
+            .and_then(|value| serde_json::from_str(value).ok())
+            .unwrap_or_else(default_client_profiles),
         subscription_support_url: map
             .get("subscription_support_url")
             .cloned()
@@ -3823,6 +3901,14 @@ struct UpdateSettings {
     default_subscription_title: Option<String>,
     #[serde(default)]
     default_subscription_description: Option<String>,
+    #[serde(default)]
+    default_subscription_group: Option<String>,
+    #[serde(default)]
+    subscription_traffic_policy: Option<String>,
+    #[serde(default)]
+    profile_update_interval_hours: Option<i64>,
+    #[serde(default)]
+    subscription_client_profiles: Option<JsonValue>,
     #[serde(default)]
     subscription_support_url: Option<String>,
     #[serde(default)]
@@ -3905,6 +3991,32 @@ async fn update_settings(
             ));
         }
         repo::set_setting(&st.pool, "default_subscription_description", value).await?;
+    }
+    if let Some(v) = input.default_subscription_group {
+        validate_subscription_group((!v.trim().is_empty()).then_some(v.trim()))?;
+        repo::set_setting(&st.pool, "default_subscription_group", v.trim()).await?;
+    }
+    if let Some(v) = input.subscription_traffic_policy {
+        validate_traffic_policy(&v, false)?;
+        repo::set_setting(&st.pool, "subscription_traffic_policy", &v).await?;
+    }
+    if let Some(v) = input.profile_update_interval_hours {
+        repo::set_setting(
+            &st.pool,
+            "profile_update_interval_hours",
+            &v.clamp(1, 168).to_string(),
+        )
+        .await?;
+    }
+    if let Some(v) = input.subscription_client_profiles {
+        validate_client_profiles(&v)?;
+        repo::set_setting(
+            &st.pool,
+            "subscription_client_profiles",
+            &serde_json::to_string(&v)
+                .map_err(|_| ApiError::bad_request("invalid client profiles"))?,
+        )
+        .await?;
     }
     if let Some(v) = input.subscription_support_url {
         let value = v.trim();
@@ -6096,6 +6208,7 @@ struct CreatedUser {
     user: UserView,
     subscription_token: Uuid,
     subscription_path: String,
+    revocable_subscription_path: String,
 }
 
 async fn create_user(
@@ -6172,9 +6285,10 @@ async fn create_user(
     )
     .await;
     Ok(Json(CreatedUser {
+        subscription_path: format!("/sub/{}", user.id),
+        revocable_subscription_path: format!("/sub/{token}"),
         user: user.into(),
         subscription_token: token,
-        subscription_path: format!("/sub/{token}"),
     }))
 }
 
@@ -6291,10 +6405,14 @@ async fn reveal_subscription(
         None => Err(ApiError::not_found("user not found")),
         Some(None) => Ok(Json(RevealedSubscription {
             subscription_token: None,
-            subscription_path: None,
+            subscription_path: Some(format!("/sub/{id}")),
+            permanent_subscription_path: Some(format!("/sub/{id}")),
+            revocable_subscription_path: None,
         })),
         Some(Some(token)) => Ok(Json(RevealedSubscription {
-            subscription_path: Some(format!("/sub/{token}")),
+            subscription_path: Some(format!("/sub/{id}")),
+            permanent_subscription_path: Some(format!("/sub/{id}")),
+            revocable_subscription_path: Some(format!("/sub/{token}")),
             subscription_token: Some(token),
         })),
     }
@@ -6354,9 +6472,13 @@ async fn reveal_user_subscription(
         Some(None) => Ok(Json(RevealedSubscription {
             subscription_token: None,
             subscription_path: None,
+            permanent_subscription_path: None,
+            revocable_subscription_path: None,
         })),
         Some(Some(token)) => Ok(Json(RevealedSubscription {
             subscription_path: Some(format!("/sub/{token}")),
+            permanent_subscription_path: None,
+            revocable_subscription_path: Some(format!("/sub/{token}")),
             subscription_token: Some(token),
         })),
     }
@@ -6387,6 +6509,99 @@ async fn delete_user_subscription(
 struct RevealedSubscription {
     subscription_token: Option<String>,
     subscription_path: Option<String>,
+    permanent_subscription_path: Option<String>,
+    revocable_subscription_path: Option<String>,
+}
+
+#[derive(Deserialize)]
+struct SubscriptionPreviewQuery {
+    client: Option<String>,
+}
+
+#[derive(Serialize)]
+struct SubscriptionPreviewEndpoint {
+    name: String,
+    protocol: String,
+    network: String,
+    xhttp_mode: Option<String>,
+    fingerprint: Option<String>,
+    warning: Option<String>,
+}
+
+async fn subscription_preview(
+    State(st): State<AppState>,
+    Extension(identity): Extension<Identity>,
+    Path(id): Path<Uuid>,
+    Query(query): Query<SubscriptionPreviewQuery>,
+) -> Result<Json<JsonValue>, ApiError> {
+    let mut user = owned_user(&st, &identity, id).await?;
+    apply_subscription_defaults(&st, &mut user).await?;
+    let settings: std::collections::HashMap<String, String> =
+        repo::all_settings(&st.pool).await?.into_iter().collect();
+    let client = query.client.as_deref().unwrap_or("generic");
+    let (mode, fingerprint) = client_profile_overrides(&settings, client)?;
+    let raw = subscription::expand_endpoints(repo::subscription_endpoints(&st.pool, id).await?);
+    let endpoints = apply_client_profile(&raw, &mode, &fingerprint);
+    let preview: Vec<SubscriptionPreviewEndpoint> = endpoints
+        .iter()
+        .map(|endpoint| {
+            let warning = if endpoint.tls_enabled
+                && endpoint
+                    .server_name
+                    .as_deref()
+                    .is_none_or(|value| value.trim().is_empty())
+            {
+                Some("TLS endpoint has no SNI".to_string())
+            } else if endpoint.kind == "shadowsocks"
+                && endpoint
+                    .extra
+                    .get("method")
+                    .and_then(JsonValue::as_str)
+                    .is_none_or(str::is_empty)
+            {
+                Some("Shadowsocks method is missing".to_string())
+            } else {
+                None
+            };
+            SubscriptionPreviewEndpoint {
+                name: subscription::client_label_from_endpoint(endpoint),
+                protocol: endpoint.kind.clone(),
+                network: endpoint.network.clone(),
+                xhttp_mode: (endpoint.network == "xhttp").then(|| {
+                    endpoint
+                        .transport_mode
+                        .clone()
+                        .unwrap_or_else(|| "auto".into())
+                }),
+                fingerprint: (endpoint.tls_enabled || endpoint.reality).then(|| {
+                    endpoint
+                        .utls_fingerprint
+                        .clone()
+                        .unwrap_or_else(|| "qq".into())
+                }),
+                warning,
+            }
+        })
+        .collect();
+    let show_traffic =
+        subscription_traffic_visible(&user.subscription_traffic_policy, user.traffic_limit_bytes);
+    let interval = settings
+        .get("profile_update_interval_hours")
+        .and_then(|value| value.parse::<i64>().ok())
+        .unwrap_or(12)
+        .clamp(1, 168);
+    Ok(Json(json!({
+        "client": client,
+        "title": subscription::profile_title(&user),
+        "description": user.subscription_description,
+        "group": user.subscription_group,
+        "traffic_header": show_traffic,
+        "profile_update_interval_hours": interval,
+        "permanent_subscription_path": format!("/sub/{}", user.id),
+        "profile_path": format!("/sub/{}/profile/{client}", user.id),
+        "endpoints": preview,
+        "warnings": if endpoints.is_empty() { vec!["No accessible endpoints".to_string()] } else { Vec::<String>::new() }
+    })))
 }
 
 async fn rotate_subscription(
@@ -6497,12 +6712,7 @@ async fn subscription_links(
         .collect::<Vec<_>>()
         .join("\n")
         + "\n";
-    let support = repo::all_settings(&st.pool)
-        .await?
-        .into_iter()
-        .find(|(k, _)| k == "subscription_support_url")
-        .map(|(_, v)| v);
-    Ok((sub_headers(&user, support.as_deref()), text))
+    Ok((subscription_headers(&st, &user).await?, text))
 }
 
 /// canonical client subscription: base64 links + Subscription-Userinfo header.
@@ -6512,12 +6722,7 @@ async fn subscription_v2ray(
 ) -> Result<impl IntoResponse, ApiError> {
     let (user, endpoints) = load_subscription(&st, token).await?;
     let body = subscription::v2ray_document(&user, &endpoints);
-    let support = repo::all_settings(&st.pool)
-        .await?
-        .into_iter()
-        .find(|(k, _)| k == "subscription_support_url")
-        .map(|(_, v)| v);
-    Ok((sub_headers(&user, support.as_deref()), body))
+    Ok((subscription_headers(&st, &user).await?, body))
 }
 
 #[derive(Deserialize)]
@@ -6692,21 +6897,27 @@ async fn subscription_wg_qr(
 
 /// Headers every subscription response carries: title, quota and refresh hint.
 /// Happ otherwise falls back to displaying the subscription URL hostname.
-fn sub_headers(user: &User, support_url: Option<&str>) -> HeaderMap {
+fn sub_headers(user: &User, support_url: Option<&str>, update_interval_hours: i64) -> HeaderMap {
     let mut headers = HeaderMap::new();
     headers.insert(
         header::CONTENT_TYPE,
         HeaderValue::from_static("text/plain; charset=utf-8"),
     );
-    headers.insert(
-        header::HeaderName::from_static("subscription-userinfo"),
-        HeaderValue::from_str(&subscription::userinfo_header(user))
-            .unwrap_or_else(|_| HeaderValue::from_static("")),
-    );
-    headers.insert(
-        header::HeaderName::from_static("profile-update-interval"),
-        HeaderValue::from_static("12"),
-    );
+    let show_traffic =
+        subscription_traffic_visible(&user.subscription_traffic_policy, user.traffic_limit_bytes);
+    if show_traffic {
+        headers.insert(
+            header::HeaderName::from_static("subscription-userinfo"),
+            HeaderValue::from_str(&subscription::userinfo_header(user))
+                .unwrap_or_else(|_| HeaderValue::from_static("")),
+        );
+    }
+    if let Ok(value) = HeaderValue::from_str(&update_interval_hours.clamp(1, 168).to_string()) {
+        headers.insert(
+            header::HeaderName::from_static("profile-update-interval"),
+            value,
+        );
+    }
     if let Ok(value) = HeaderValue::from_str(&subscription::profile_title_header(user)) {
         headers.insert(header::HeaderName::from_static("profile-title"), value);
     }
@@ -6715,12 +6926,43 @@ fn sub_headers(user: &User, support_url: Option<&str>) -> HeaderMap {
             headers.insert(header::HeaderName::from_static("announce"), value);
         }
     }
+    if let Some(group) = user
+        .subscription_group
+        .as_deref()
+        .filter(|value| !value.trim().is_empty())
+    {
+        if let Ok(value) = HeaderValue::from_str(&format!(
+            "base64:{}",
+            base64::engine::general_purpose::STANDARD.encode(group)
+        )) {
+            headers.insert(header::HeaderName::from_static("profile-group"), value);
+        }
+    }
     if let Some(value) = support_url.filter(|v| !v.trim().is_empty()) {
         if let Ok(value) = HeaderValue::from_str(value) {
             headers.insert(header::HeaderName::from_static("support-url"), value);
         }
     }
     headers
+}
+
+fn subscription_traffic_visible(policy: &str, traffic_limit_bytes: i64) -> bool {
+    match policy {
+        "never" => false,
+        "always" => true,
+        _ => traffic_limit_bytes > 0,
+    }
+}
+
+async fn subscription_headers(st: &AppState, user: &User) -> Result<HeaderMap, ApiError> {
+    let settings: std::collections::HashMap<String, String> =
+        repo::all_settings(&st.pool).await?.into_iter().collect();
+    let support = settings.get("subscription_support_url").map(String::as_str);
+    let interval = settings
+        .get("profile_update_interval_hours")
+        .and_then(|value| value.parse::<i64>().ok())
+        .unwrap_or(12);
+    Ok(sub_headers(user, support, interval))
 }
 
 async fn subscription_singbox(
@@ -6757,12 +6999,8 @@ async fn subscription_clash(
     let profile = repo::routing_profile_for_user(&st.pool, user.id).await?;
     let body = subscription::clash_config(&user, &endpoints, profile.as_ref());
     let mut response = ([(header::CONTENT_TYPE, "text/yaml; charset=utf-8")], body).into_response();
-    let support = repo::all_settings(&st.pool)
-        .await?
-        .into_iter()
-        .find(|(k, _)| k == "subscription_support_url")
-        .map(|(_, v)| v);
-    let headers = sub_headers(&user, support.as_deref());
+    let mut headers = subscription_headers(&st, &user).await?;
+    headers.remove(header::CONTENT_TYPE);
     response.headers_mut().extend(headers);
     Ok(response)
 }
@@ -6797,6 +7035,68 @@ enum SubFormat {
     Happ,
     Clash,
     Singbox,
+}
+
+fn client_profile_overrides(
+    settings: &std::collections::HashMap<String, String>,
+    client: &str,
+) -> Result<(String, String), ApiError> {
+    if !matches!(
+        client,
+        "happ-android" | "happ-desktop" | "karing" | "generic"
+    ) {
+        return Err(ApiError::bad_request("unknown subscription client profile"));
+    }
+    let profiles = settings
+        .get("subscription_client_profiles")
+        .and_then(|value| serde_json::from_str::<JsonValue>(value).ok())
+        .unwrap_or_else(default_client_profiles);
+    let profile = profiles
+        .get(client)
+        .and_then(JsonValue::as_object)
+        .ok_or_else(|| ApiError::bad_request("client profile is not configured"))?;
+    Ok((
+        profile
+            .get("xhttp_mode")
+            .and_then(JsonValue::as_str)
+            .unwrap_or("auto")
+            .to_string(),
+        profile
+            .get("fingerprint")
+            .and_then(JsonValue::as_str)
+            .unwrap_or("qq")
+            .to_string(),
+    ))
+}
+
+fn apply_client_profile(
+    endpoints: &[crate::db::models::SubscriptionEndpoint],
+    mode: &str,
+    fingerprint: &str,
+) -> Vec<crate::db::models::SubscriptionEndpoint> {
+    endpoints
+        .iter()
+        .cloned()
+        .map(|mut endpoint| {
+            if endpoint.network == "xhttp" {
+                endpoint.transport_mode = Some(mode.to_string());
+                endpoint.utls_fingerprint = Some(fingerprint.to_string());
+            }
+            endpoint
+        })
+        .collect()
+}
+
+async fn subscription_client_profile(
+    State(st): State<AppState>,
+    Path((token, client)): Path<(Uuid, String)>,
+) -> Result<Response, ApiError> {
+    let (user, endpoints) = load_subscription(&st, token).await?;
+    let settings: std::collections::HashMap<String, String> =
+        repo::all_settings(&st.pool).await?.into_iter().collect();
+    let (mode, fingerprint) = client_profile_overrides(&settings, &client)?;
+    let endpoints = apply_client_profile(&endpoints, &mode, &fingerprint);
+    tailored_response(&st, SubFormat::V2ray, &user, &endpoints).await
 }
 
 /// Map a client User-Agent to the format it expects. Returns None for browsers
@@ -6868,34 +7168,12 @@ async fn tailored_response(
         }
     };
     let mut response = ([(header::CONTENT_TYPE, content_type)], body).into_response();
-    let headers = response.headers_mut();
-    if let Ok(v) = HeaderValue::from_str(&subscription::userinfo_header(user)) {
-        headers.insert(header::HeaderName::from_static("subscription-userinfo"), v);
-    }
-    headers.insert(
-        header::HeaderName::from_static("profile-update-interval"),
-        HeaderValue::from_static("12"),
-    );
-    if let Ok(v) = HeaderValue::from_str(&subscription::profile_title_header(user)) {
-        headers.insert(header::HeaderName::from_static("profile-title"), v);
-    }
-    if let Some(value) = subscription::announce_header(user) {
-        if let Ok(v) = HeaderValue::from_str(&value) {
-            headers.insert(header::HeaderName::from_static("announce"), v);
-        }
-    }
-    if let Some(value) = repo::all_settings(&st.pool)
-        .await?
-        .into_iter()
-        .find(|(k, _)| k == "subscription_support_url")
-        .map(|(_, v)| v)
-        .filter(|v| !v.trim().is_empty())
-    {
-        if let Ok(v) = HeaderValue::from_str(&value) {
-            headers.insert(header::HeaderName::from_static("support-url"), v);
-        }
-    }
-    headers.insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
+    let mut presentation = subscription_headers(st, user).await?;
+    presentation.remove(header::CONTENT_TYPE);
+    response.headers_mut().extend(presentation);
+    response
+        .headers_mut()
+        .insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
     Ok(response)
 }
 
@@ -6921,17 +7199,9 @@ async fn subscription_by_alias(
             subscription::expand_endpoints(repo::subscription_endpoints(&st.pool, user.id).await?);
         return tailored_response(&st, fmt, &user, &endpoints).await;
     }
-    // a browser: bounce to /sub/{token} when we can recover the token.
-    if let Some(Some(token)) = repo::reveal_subscription_token(&st.pool, user.id).await? {
-        return Ok(axum::response::Redirect::to(&format!("/sub/{token}")).into_response());
-    }
-    // legacy user without a revealable token: hand back the universal base64 sub.
-    if let Some(reason) = user.suppressed_reason() {
-        return Err(ApiError::gone(format!("subscription is {reason}")));
-    }
-    let endpoints =
-        subscription::expand_endpoints(repo::subscription_endpoints(&st.pool, user.id).await?);
-    tailored_response(&st, SubFormat::V2ray, &user, &endpoints).await
+    // A browser uses the permanent UUID link; it never requires token
+    // decryption or an operator-triggered rotation.
+    return Ok(axum::response::Redirect::to(&format!("/sub/{}", user.id)).into_response());
 }
 
 /// QR encoding the whole-subscription URL (alias if set, else token) so a single
@@ -7086,6 +7356,25 @@ async fn apply_subscription_defaults(st: &AppState, user: &mut User) -> Result<(
                 user.subscription_description = Some(value.clone());
             }
         }
+    }
+    if user
+        .subscription_group
+        .as_deref()
+        .map(|v| v.trim().is_empty())
+        .unwrap_or(true)
+    {
+        if let Some(value) = settings.get("default_subscription_group") {
+            if !value.trim().is_empty() {
+                user.subscription_group = Some(value.clone());
+            }
+        }
+    }
+    if user.subscription_traffic_policy == "inherit" {
+        user.subscription_traffic_policy = settings
+            .get("subscription_traffic_policy")
+            .filter(|value| matches!(value.as_str(), "auto" | "always" | "never"))
+            .cloned()
+            .unwrap_or_else(|| "auto".to_string());
     }
     Ok(())
 }
@@ -7790,6 +8079,8 @@ fn validate_user(input: &NewUser) -> Result<(), ApiError> {
     }
     validate_subscription_title(input.subscription_title.as_deref())?;
     validate_subscription_description(input.subscription_description.as_deref())?;
+    validate_subscription_group(input.subscription_group.as_deref())?;
+    validate_traffic_policy(&input.subscription_traffic_policy, true)?;
     Ok(())
 }
 fn validate_update_user(input: &UpdateUser) -> Result<(), ApiError> {
@@ -7814,6 +8105,12 @@ fn validate_update_user(input: &UpdateUser) -> Result<(), ApiError> {
     if let Patch::Value(description) = &input.subscription_description {
         validate_subscription_description(Some(description))?;
     }
+    if let Patch::Value(group) = &input.subscription_group {
+        validate_subscription_group(Some(group))?;
+    }
+    if let Some(policy) = &input.subscription_traffic_policy {
+        validate_traffic_policy(policy, true)?;
+    }
     Ok(())
 }
 
@@ -7837,6 +8134,29 @@ fn validate_subscription_description(description: Option<&str>) -> Result<(), Ap
                 "subscription_description must contain 1 to 200 characters",
             ));
         }
+    }
+    Ok(())
+}
+
+fn validate_subscription_group(group: Option<&str>) -> Result<(), ApiError> {
+    if let Some(value) = group {
+        let length = value.trim().chars().count();
+        if !(1..=40).contains(&length) {
+            return Err(ApiError::bad_request(
+                "subscription_group must contain 1 to 40 characters",
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn validate_traffic_policy(policy: &str, allow_inherit: bool) -> Result<(), ApiError> {
+    let valid =
+        matches!(policy, "auto" | "always" | "never") || (allow_inherit && policy == "inherit");
+    if !valid {
+        return Err(ApiError::bad_request(
+            "subscription_traffic_policy must be inherit, auto, always or never",
+        ));
     }
     Ok(())
 }
@@ -7970,11 +8290,37 @@ mod tests {
             password: "secret".into(),
             subscription_title: None,
             subscription_description: None,
+            subscription_group: None,
+            subscription_traffic_policy: "inherit".into(),
             traffic_limit_bytes: -1,
             expires_at: None,
             device_limit: 0,
         };
         assert!(validate_user(&user).is_err());
+    }
+
+    #[test]
+    fn validates_subscription_appearance_and_client_profiles() {
+        assert!(validate_subscription_group(Some("Premium")).is_ok());
+        assert!(validate_subscription_group(Some(&"x".repeat(41))).is_err());
+        assert!(validate_traffic_policy("inherit", true).is_ok());
+        assert!(validate_traffic_policy("inherit", false).is_err());
+        assert!(validate_traffic_policy("never", false).is_ok());
+
+        let profiles = default_client_profiles();
+        assert!(validate_client_profiles(&profiles).is_ok());
+        let mut invalid = profiles;
+        invalid["happ-android"]["xhttp_mode"] = json!("invalid");
+        assert!(validate_client_profiles(&invalid).is_err());
+    }
+
+    #[test]
+    fn traffic_row_policy_hides_unlimited_users_by_default() {
+        assert!(!subscription_traffic_visible("auto", 0));
+        assert!(subscription_traffic_visible("auto", 1024));
+        assert!(subscription_traffic_visible("always", 0));
+        assert!(!subscription_traffic_visible("never", 1024));
+        assert!(!subscription_traffic_visible("inherit", 0));
     }
 
     fn valid_reality_inbound() -> NewInbound {

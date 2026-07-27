@@ -5,6 +5,28 @@ version tags and is currently pre-stable.
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-07-28
+
+### Added
+
+- Permanent per-user UUID subscription links that remain available without
+  rotating protocol credentials or the optional revocable subscription token.
+- Global and per-user subscription presentation controls for client title,
+  description, group and traffic-row visibility.
+- Configurable Happ Android, Happ Desktop, Karing and generic Xray compatibility
+  profiles with per-client XHTTP mode and uTLS fingerprint overrides.
+- An operator subscription preview showing effective metadata, client profile
+  URLs, endpoint transport settings and generation warnings.
+
+### Changed
+
+- Credential and revocable-link rotation are now explicitly optional secondary
+  actions; the panel shows the permanent subscription link by default.
+- Subscription update interval and support metadata are managed alongside the
+  global subscription appearance settings.
+- Unlimited users no longer receive `Subscription-Userinfo` by default when the
+  global traffic policy is `auto`, avoiding an unnecessary infinity row in Happ.
+
 ## [0.0.13] - 2026-07-27
 
 ### Changed
@@ -175,7 +197,8 @@ version tags and is currently pre-stable.
 - GitHub Actions for tests, database recovery, secret scanning and release
   packaging.
 
-[Unreleased]: https://github.com/akiko99x/honey/compare/v0.0.13...HEAD
+[Unreleased]: https://github.com/akiko99x/honey/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/akiko99x/honey/compare/v0.0.13...v0.1.0
 [0.0.13]: https://github.com/akiko99x/honey/compare/v0.0.12...v0.0.13
 [0.0.12]: https://github.com/akiko99x/honey/compare/v0.0.11...v0.0.12
 [0.0.11]: https://github.com/akiko99x/honey/compare/v0.0.10...v0.0.11

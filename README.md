@@ -171,10 +171,14 @@ Then, in the panel: add an **inbound** on the node (e.g. VLESS+REALITY on 443 or
 Hysteria2 on a UDP port), add a **user**, and `push`. Access is node-group based:
 an ungrouped node is universal, while a grouped node is visible only to users
 sharing one of its groups. New users receive the default group. The user's
-subscription is served at:
+subscription has a permanent `/sub/:user_uuid` URL. Legacy and optional
+revocable token URLs continue to resolve to the same user. Credential and token
+rotation are independent, optional actions. Available outputs include:
 
 - `GET /sub/:token` — styled status page (send `Accept: application/json` for data);
-- `GET /sub/:token/v2ray` — base64 links + `Subscription-Userinfo` (quota/expiry);
+- `GET /sub/:token/v2ray` — base64 links with optional traffic metadata;
+- `GET /sub/:token/profile/:client` — compatibility output for
+  `happ-android`, `happ-desktop`, `karing` or `generic`;
 - `GET /sub/:token/links` — the same links as plain text;
 - `GET /sub/:token/sing-box` — a ready sing-box client config;
 - `GET /sub/:token/sing-box-tun` — sing-box config with a system-wide TUN inbound;
