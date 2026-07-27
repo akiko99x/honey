@@ -933,7 +933,7 @@ type Tls struct {
 	KeyPath         string                 `protobuf:"bytes,4,opt,name=key_path,json=keyPath,proto3" json:"key_path,omitempty"`
 	Reality         *Reality               `protobuf:"bytes,5,opt,name=reality,proto3" json:"reality,omitempty"`
 	Ech             bool                   `protobuf:"varint,6,opt,name=ech,proto3" json:"ech,omitempty"`                                               // Encrypted Client Hello
-	UtlsFingerprint string                 `protobuf:"bytes,7,opt,name=utls_fingerprint,json=utlsFingerprint,proto3" json:"utls_fingerprint,omitempty"` // chrome | firefox | safari | randomized (client hint)
+	UtlsFingerprint string                 `protobuf:"bytes,7,opt,name=utls_fingerprint,json=utlsFingerprint,proto3" json:"utls_fingerprint,omitempty"` // chrome | firefox | safari | ios | android | edge | 360 | qq | random | randomized
 	// shadowtls (when type == "shadowtls"): the real TLS server to masquerade to
 	ShadowtlsHandshakeServer string `protobuf:"bytes,8,opt,name=shadowtls_handshake_server,json=shadowtlsHandshakeServer,proto3" json:"shadowtls_handshake_server,omitempty"`
 	ShadowtlsHandshakePort   uint32 `protobuf:"varint,9,opt,name=shadowtls_handshake_port,json=shadowtlsHandshakePort,proto3" json:"shadowtls_handshake_port,omitempty"`

@@ -946,7 +946,7 @@ pub struct NewInbound {
     pub transport_mode: Option<String>,
     #[serde(default)]
     pub ech: bool,
-    #[serde(default)]
+    #[serde(default = "default_utls_fingerprint")]
     pub utls_fingerprint: Option<String>,
     #[serde(default)]
     pub shadowtls_handshake_server: Option<String>,
@@ -970,6 +970,10 @@ pub struct NewInbound {
 
 fn default_network() -> String {
     "tcp".into()
+}
+
+fn default_utls_fingerprint() -> Option<String> {
+    Some("qq".into())
 }
 
 #[derive(Debug, Clone, Deserialize)]

@@ -124,7 +124,7 @@ func TestBuildHysteria2UsesXrayHysteriaProtocolAndTransport(t *testing.T) {
 		t.Fatalf("Xray Hysteria version must be 2: %#v", settings)
 	}
 	user := settings["users"].([]any)[0].(map[string]any)
-	if user["auth"] != "secret" {
+	if user["auth"] != "alice:secret" {
 		t.Fatalf("Xray Hysteria user must use auth: %#v", user)
 	}
 	stream := inbound["streamSettings"].(map[string]any)

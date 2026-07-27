@@ -7304,6 +7304,24 @@ fn validate_inbound(input: &NewInbound) -> Result<(), ApiError> {
             "network must be one of tcp/ws/grpc/http/h2/httpupgrade/xhttp/quic/mkcp",
         ));
     }
+    if input
+        .transport_mode
+        .as_deref()
+        .is_some_and(|mode| !is_valid_transport_mode(mode))
+    {
+        return Err(ApiError::bad_request(
+            "transport_mode must be one of auto/packet-up/stream-up/stream-one",
+        ));
+    }
+    if input
+        .utls_fingerprint
+        .as_deref()
+        .is_some_and(|fingerprint| !is_valid_utls_fingerprint(fingerprint))
+    {
+        return Err(ApiError::bad_request(
+            "utls_fingerprint must be one of chrome/firefox/safari/ios/android/edge/360/qq/random/randomized",
+        ));
+    }
     validate_vless_flow(&input.kind, &input.network, input.tls_enabled, &input.flow)?;
     if input
         .shadowtls_handshake_port
@@ -7331,6 +7349,26 @@ fn is_valid_network(network: &str) -> bool {
     matches!(
         network,
         "tcp" | "ws" | "grpc" | "http" | "h2" | "httpupgrade" | "xhttp" | "quic" | "mkcp"
+    )
+}
+
+fn is_valid_transport_mode(mode: &str) -> bool {
+    matches!(mode, "auto" | "packet-up" | "stream-up" | "stream-one")
+}
+
+fn is_valid_utls_fingerprint(fingerprint: &str) -> bool {
+    matches!(
+        fingerprint,
+        "chrome"
+            | "firefox"
+            | "safari"
+            | "ios"
+            | "android"
+            | "edge"
+            | "360"
+            | "qq"
+            | "random"
+            | "randomized"
     )
 }
 
@@ -7408,6 +7446,22 @@ fn validate_update_inbound(input: &UpdateInbound) -> Result<(), ApiError> {
         .is_some_and(|n| !is_valid_network(n))
     {
         return Err(ApiError::bad_request("unsupported network transport"));
+    }
+    if matches!(
+        &input.transport_mode,
+        Patch::Value(mode) if !is_valid_transport_mode(mode)
+    ) {
+        return Err(ApiError::bad_request(
+            "transport_mode must be one of auto/packet-up/stream-up/stream-one",
+        ));
+    }
+    if matches!(
+        &input.utls_fingerprint,
+        Patch::Value(fingerprint) if !is_valid_utls_fingerprint(fingerprint)
+    ) {
+        return Err(ApiError::bad_request(
+            "utls_fingerprint must be one of chrome/firefox/safari/ios/android/edge/360/qq/random/randomized",
+        ));
     }
     if input
         .flow
@@ -7947,7 +8001,7 @@ mod tests {
             transport_service_name: None,
             transport_mode: None,
             ech: false,
-            utls_fingerprint: Some("chrome".into()),
+            utls_fingerprint: Some("qq".into()),
             shadowtls_handshake_server: None,
             shadowtls_handshake_port: None,
             extra: json!({}),
@@ -7988,7 +8042,7 @@ mod tests {
             transport_service_name: None,
             transport_mode: None,
             ech: false,
-            utls_fingerprint: Some("chrome".into()),
+            utls_fingerprint: Some("qq".into()),
             shadowtls_handshake_server: None,
             shadowtls_handshake_port: None,
             extra: json!({}),
@@ -8102,6 +8156,23 @@ mod tests {
         inbound.flow.clear();
         inbound.network = "xhttp".into();
         assert!(validate_inbound(&inbound).is_ok());
+    }
+
+    #[test]
+    fn validates_xhttp_mode_and_utls_fingerprint_choices() {
+        let mut inbound = valid_reality_inbound();
+        inbound.flow.clear();
+        inbound.network = "xhttp".into();
+        inbound.transport_mode = Some("auto".into());
+        inbound.utls_fingerprint = Some("qq".into());
+        assert!(validate_inbound(&inbound).is_ok());
+
+        inbound.transport_mode = Some("invalid".into());
+        assert!(validate_inbound(&inbound).is_err());
+
+        inbound.transport_mode = Some("auto".into());
+        inbound.utls_fingerprint = Some("manual-value".into());
+        assert!(validate_inbound(&inbound).is_err());
     }
 
     #[test]

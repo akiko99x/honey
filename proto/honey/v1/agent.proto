@@ -165,7 +165,7 @@ message Tls {
   string  key_path = 4;
   Reality reality = 5;
   bool    ech = 6;              // Encrypted Client Hello
-  string  utls_fingerprint = 7; // chrome | firefox | safari | randomized (client hint)
+  string  utls_fingerprint = 7; // chrome | firefox | safari | ios | android | edge | 360 | qq | random | randomized
 
   // shadowtls (when type == "shadowtls"): the real TLS server to masquerade to
   string  shadowtls_handshake_server = 8;

@@ -47,10 +47,13 @@ func TestBuildConfig_MultiProtocol(t *testing.T) {
 			} `json:"clash_api"`
 		} `json:"experimental"`
 		Inbounds []struct {
-			Type string `json:"type"`
-			Tag  string `json:"tag"`
-			Port int    `json:"listen_port"`
-			TLS  struct {
+			Type  string `json:"type"`
+			Tag   string `json:"tag"`
+			Port  int    `json:"listen_port"`
+			Users []struct {
+				Password string `json:"password"`
+			} `json:"users"`
+			TLS struct {
 				Reality map[string]any `json:"reality"`
 			} `json:"tls"`
 		} `json:"inbounds"`
@@ -70,6 +73,9 @@ func TestBuildConfig_MultiProtocol(t *testing.T) {
 	}
 	if cfg.Inbounds[1].Type != "hysteria2" || cfg.Inbounds[1].Port != 8443 {
 		t.Errorf("hysteria2 inbound malformed: %+v", cfg.Inbounds[1])
+	}
+	if got := cfg.Inbounds[1].Users[0].Password; got != "u1:s3cret" {
+		t.Errorf("hysteria2 userpass auth = %q, want %q", got, "u1:s3cret")
 	}
 }
 

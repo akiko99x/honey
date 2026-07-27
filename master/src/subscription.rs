@@ -103,7 +103,9 @@ fn singbox_config(
 ) -> Json {
     let proxies: Vec<Json> = endpoints
         .iter()
-        .filter_map(|endpoint| singbox_outbound(&user.uuid, &user.password, endpoint).ok())
+        .filter_map(|endpoint| {
+            singbox_outbound(&user.uuid, &user.username, &user.password, endpoint).ok()
+        })
         .collect();
     let tags: Vec<String> = proxies
         .iter()
@@ -417,7 +419,7 @@ fn clash_proxy(user: &User, e: &SubscriptionEndpoint) -> Result<(String, Json)> 
                     ro["short-id"] = json!(sid);
                 }
                 p["reality-opts"] = ro;
-                p["client-fingerprint"] = json!(e.utls_fingerprint.as_deref().unwrap_or("chrome"));
+                p["client-fingerprint"] = json!(e.utls_fingerprint.as_deref().unwrap_or("qq"));
             }
         }
     };
@@ -470,7 +472,7 @@ fn clash_proxy(user: &User, e: &SubscriptionEndpoint) -> Result<(String, Json)> 
         }
         "hysteria2" => {
             p["type"] = json!("hysteria2");
-            p["password"] = json!(user.password);
+            p["password"] = json!(hysteria_auth(user));
             if let Some(sni) = e.server_name.as_deref() {
                 p["sni"] = json!(sni);
             }
@@ -501,33 +503,8 @@ pub fn v2ray_document(user: &User, endpoints: &[SubscriptionEndpoint]) -> String
     STANDARD.encode(joined)
 }
 
-/// Happ accepts Hysteria2 auth through its documented `auth` query parameter.
-/// This avoids a desktop importer bug that otherwise copies URI userinfo into
-/// Xray's `settings.address` as `password@hostname`.
 pub fn happ_v2ray_document(user: &User, endpoints: &[SubscriptionEndpoint]) -> String {
-    let joined = endpoint_links(user, endpoints)
-        .into_iter()
-        .filter_map(|link| link.uri.map(|uri| happ_compat_uri(&link.protocol, &uri)))
-        .collect::<Vec<_>>()
-        .join("\n");
-    STANDARD.encode(joined)
-}
-
-fn happ_compat_uri(protocol: &str, uri: &str) -> String {
-    if protocol != "hysteria2" {
-        return uri.to_string();
-    }
-    let Ok(mut url) = Url::parse(uri) else {
-        return uri.to_string();
-    };
-    let auth = url.username().to_string();
-    if auth.is_empty() {
-        return uri.to_string();
-    }
-    let _ = url.set_username("");
-    let _ = url.set_password(None);
-    url.query_pairs_mut().append_pair("auth", &auth);
-    url.into()
+    v2ray_document(user, endpoints)
 }
 
 /// `Subscription-Userinfo` header value so clients can show quota + expiry.
@@ -673,7 +650,8 @@ fn hysteria2_uri(user: &User, endpoint: &SubscriptionEndpoint) -> Result<String>
         return Err(anyhow!("hysteria2 requires TLS"));
     }
 
-    let mut url = credential_url("hysteria2", &user.password, None, endpoint)?;
+    let auth = hysteria_auth(user);
+    let mut url = credential_url("hysteria2", &auth, None, endpoint)?;
     // Keep the canonical slash before the query. Some third-party importers
     // reject the otherwise valid empty-path URL.
     url.set_path("/");
@@ -685,6 +663,10 @@ fn hysteria2_uri(user: &User, endpoint: &SubscriptionEndpoint) -> Result<String>
     }
     set_label(&mut url, user, endpoint);
     Ok(url.into())
+}
+
+fn hysteria_auth(user: &User) -> String {
+    format!("{}:{}", user.username, user.password)
 }
 
 fn password_uri(scheme: &str, user: &User, endpoint: &SubscriptionEndpoint) -> Result<String> {
@@ -886,13 +868,14 @@ fn append_transport(url: &mut Url, endpoint: &SubscriptionEndpoint) {
             .utls_fingerprint
             .as_deref()
             .filter(|f| !f.is_empty())
-            .unwrap_or("chrome");
+            .unwrap_or("qq");
         query.append_pair("fp", fp);
     }
 }
 
 pub(crate) fn singbox_outbound(
     uuid: &str,
+    username: &str,
     password: &str,
     endpoint: &SubscriptionEndpoint,
 ) -> Result<Json> {
@@ -907,8 +890,13 @@ pub(crate) fn singbox_outbound(
             "type": "vmess", "tag": tag, "server": server,
             "server_port": endpoint.listen_port, "uuid": uuid, "security": "auto"
         }),
-        "hysteria2" | "trojan" => json!({
-            "type": endpoint.kind, "tag": tag, "server": server,
+        "hysteria2" => json!({
+            "type": "hysteria2", "tag": tag, "server": server,
+            "server_port": endpoint.listen_port,
+            "password": format!("{username}:{password}")
+        }),
+        "trojan" => json!({
+            "type": "trojan", "tag": tag, "server": server,
             "server_port": endpoint.listen_port, "password": password
         }),
         "tuic" => json!({
@@ -953,7 +941,7 @@ pub(crate) fn singbox_outbound(
             .utls_fingerprint
             .as_deref()
             .filter(|value| !value.is_empty())
-            .or(endpoint.reality.then_some("chrome"));
+            .or(endpoint.reality.then_some("qq"));
         if let Some(fingerprint) = fingerprint {
             tls["utls"] = json!({"enabled": true, "fingerprint": fingerprint});
         }
@@ -1284,7 +1272,7 @@ mod tests {
         endpoint.server_name = Some("203.0.113.10".into());
 
         let uri = endpoint_uri(&user, &endpoint).unwrap();
-        assert!(uri.starts_with("hysteria2://secret@203.0.113.10:443/?sni=203.0.113.10"));
+        assert!(uri.starts_with("hysteria2://alice%3Asecret@203.0.113.10:443/?sni=203.0.113.10"));
         assert!(!uri.contains("security="));
 
         let parsed = Url::parse(&uri).unwrap();
@@ -1302,14 +1290,15 @@ mod tests {
         let outbound = outbound_by_tag(&config, "ams-1-vless-in");
         assert_eq!(outbound["type"], "hysteria2");
         assert_eq!(outbound["server"], "203.0.113.10");
-        assert_eq!(outbound["password"], "secret");
+        assert_eq!(outbound["password"], "alice:secret");
 
         let clash: Json = serde_json::from_str(&clash_config(&user, &[endpoint], None)).unwrap();
         assert_eq!(clash["proxies"][0]["type"], "hysteria2");
+        assert_eq!(clash["proxies"][0]["password"], "alice:secret");
     }
 
     #[test]
-    fn renders_happ_hysteria_auth_as_query_parameter() {
+    fn renders_happ_hysteria_userpass_in_uri_auth() {
         let user = user();
         let mut endpoint = endpoint();
         endpoint.kind = "hysteria2".into();
@@ -1319,9 +1308,9 @@ mod tests {
 
         let encoded = happ_v2ray_document(&user, &[endpoint]);
         let decoded = String::from_utf8(STANDARD.decode(encoded).unwrap()).unwrap();
-        assert!(decoded.starts_with("hysteria2://hy2.example.com:443/?sni=hy2.example.com"));
-        assert!(decoded.contains("&auth=secret"));
-        assert!(!decoded.contains("secret@"));
+        assert!(decoded
+            .starts_with("hysteria2://alice%3Asecret@hy2.example.com:443/?sni=hy2.example.com"));
+        assert!(!decoded.contains("&auth="));
     }
 
     #[test]

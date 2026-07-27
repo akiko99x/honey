@@ -135,7 +135,7 @@ func buildSettings(inboundType string, users []core.User) map[string]any {
 	if inboundType == "hysteria2" {
 		hysteriaUsers := make([]map[string]any, 0, len(users))
 		for _, u := range users {
-			user := map[string]any{"auth": u.Password}
+			user := map[string]any{"auth": u.Name + ":" + u.Password}
 			if u.Name != "" {
 				user["email"] = u.Name
 			}

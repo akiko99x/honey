@@ -5,6 +5,16 @@ version tags and is currently pre-stable.
 
 ## [Unreleased]
 
+## [0.0.13] - 2026-07-27
+
+### Changed
+
+- VLESS subscriptions now default to the `qq` uTLS fingerprint, with all
+  Happ-supported fingerprint choices available in the inbound forms.
+- XHTTP inbounds now default to `auto` mode.
+- Hysteria2 authentication is generated consistently as `username:password`
+  in node configs and every subscription format.
+
 ## [0.0.12] - 2026-07-26
 
 ### Fixed
@@ -165,7 +175,8 @@ version tags and is currently pre-stable.
 - GitHub Actions for tests, database recovery, secret scanning and release
   packaging.
 
-[Unreleased]: https://github.com/akiko99x/honey/compare/v0.0.12...HEAD
+[Unreleased]: https://github.com/akiko99x/honey/compare/v0.0.13...HEAD
+[0.0.13]: https://github.com/akiko99x/honey/compare/v0.0.12...v0.0.13
 [0.0.12]: https://github.com/akiko99x/honey/compare/v0.0.11...v0.0.12
 [0.0.11]: https://github.com/akiko99x/honey/compare/v0.0.10...v0.0.11
 [0.0.10]: https://github.com/akiko99x/honey/compare/v0.0.9...v0.0.10

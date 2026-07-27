@@ -386,7 +386,9 @@ async fn build_chain_outbound(
     let Some(exit) = repo::endpoint_for_inbound(pool, exit_id).await? else {
         return Ok(String::new());
     };
-    let mut outbound = crate::subscription::singbox_outbound(uuid, password, &exit)?;
+    let chain_username = format!("chain-{}-{}", entry.tag, entry.id);
+    let mut outbound =
+        crate::subscription::singbox_outbound(uuid, &chain_username, password, &exit)?;
     outbound["tag"] = serde_json::json!(format!("chain-{}", entry.tag));
     Ok(serde_json::to_string(&outbound)?)
 }

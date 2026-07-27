@@ -2377,6 +2377,7 @@
       tag: "", port: "", flow: "xtls-rprx-vision",
       happ_name: "", happ_description: "", country_code: "",
       security: "reality", network: "tcp", transport_path: "", transport_service_name: "", transport_host: "", transport_mode: "",
+      utls_fingerprint: "qq",
       cert_source: "acme", acme_email: "", acme_challenge: "http", acme_http_port: "9080",
       server_name: "www.cloudflare.com", cert_path: "", key_path: "",
       reality_handshake_server: "www.cloudflare.com", reality_handshake_port: "443",
@@ -2401,6 +2402,7 @@
       security, network: ib.network || "tcp",
       transport_path: ib.transport_path || "", transport_service_name: ib.transport_service_name || "", transport_host: ib.transport_host || "",
       transport_mode: ib.transport_mode || "",
+      utls_fingerprint: ib.utls_fingerprint || "qq",
       cert_source: acme ? "acme" : "manual", acme_email: (acme && ib.extra.acme.email) || "",
       acme_challenge: acme && ib.extra.acme.disable_http_challenge ? "tls-alpn" : "http",
       acme_http_port: (acme && ib.extra.acme.alternative_http_port) || "9080",
@@ -2451,7 +2453,7 @@
     const nets = wizNetworks(w.core, w.security);
     if (!nets.includes(w.network)) w.network = nets[0];
     if (w.kind !== "vless" || w.network !== "tcp" || w.security === "none") w.flow = "";
-    if (w.network === "xhttp" && !w.transport_mode) w.transport_mode = "packet-up";
+    if (w.network === "xhttp" && !w.transport_mode) w.transport_mode = "auto";
     if (w.network !== "xhttp") w.transport_mode = "";
   }
   function flowChoices(w) {
@@ -2521,13 +2523,14 @@
       <div class="panel wiz-panel"><div class="panel-title">3 · Security</div><div class="form-body">
         <div class="seg">${secs.map((s) => `<button type="button" class="seg-btn ${w.security === s ? "on" : ""}" data-wiz-set="security" data-val="${s}">${esc(s)}</button>`).join("")}</div>
         ${wizSecurityFields(w)}
+        ${["tls", "reality"].includes(w.security) ? `<label>${helpLabel("uTLS fingerprint", "Client TLS fingerprint advertised in generated subscriptions. qq is the compatibility default; choose another only for a client or network that needs it.")}<select data-wiz="utls_fingerprint">${["chrome", "firefox", "safari", "ios", "android", "edge", "360", "qq", "random", "randomized"].map((v) => option(v, v, w.utls_fingerprint || "qq")).join("")}</select></label>` : ""}
       </div></div>
 
       ${showT ? `<div class="panel wiz-panel"><div class="panel-title">4 · Transport</div><div class="form-body">
         <div class="form-row"><label>${helpLabel("Network", "The transport framing used above the protocol. Server and client must use the same transport; paths, hosts or service names appear only when that transport needs them.")}<select data-wiz="network" data-struct>${nets.map((n) => option(n, n, w.network)).join("")}</select></label>
         ${["ws", "httpupgrade", "xhttp"].includes(w.network) ? `<label><span>Path</span><input data-wiz="transport_path" value="${esc(w.transport_path)}" placeholder="/honey"></label>` : w.network === "grpc" ? `<label><span>gRPC service</span><input data-wiz="transport_service_name" value="${esc(w.transport_service_name)}" placeholder="honey"></label>` : `<label><span>&nbsp;</span><span class="form-note" style="padding-top:9px">${w.network === "tcp" ? "raw tcp — no extra options" : esc(w.network) + " — defaults used"}</span></label>`}</div>
         ${["ws", "http", "h2", "httpupgrade", "xhttp"].includes(w.network) ? `<div class="form-row"><label>${helpLabel("CDN host (Host header)", "The HTTP Host value used by this transport. When a public CDN hostname is configured, generated subscriptions connect to it instead of the node address.")}<input data-wiz="transport_host" list="wiz-domains" value="${esc(w.transport_host)}" placeholder="cdn.example.com"></label><label><span>&nbsp;</span><span class="form-note" style="padding-top:9px">set to a registered CDN domain — the subscription connects here, not the origin IP</span></label></div>` : ""}
-        ${w.network === "xhttp" ? `<label>${helpLabel("xHTTP mode", "packet-up is the most broadly compatible XHTTP mode. Keep auto only when you specifically need Xray's automatic mode selection.")}<select data-wiz="transport_mode" data-struct>${["packet-up", "auto", "stream-up", "stream-one"].map((v) => option(v, v, w.transport_mode || "packet-up")).join("")}</select><p class="form-note">packet-up is the recommended default for XHTTP compatibility.</p></label>` : ""}
+        ${w.network === "xhttp" ? `<label>${helpLabel("xHTTP mode", "Xray's auto mode selects the transport behavior for the client. Change it only when a particular network or client benefits from an explicit mode.")}<select data-wiz="transport_mode" data-struct>${["auto", "packet-up", "stream-up", "stream-one"].map((v) => option(v, v, w.transport_mode || "auto")).join("")}</select><p class="form-note">auto is the default; packet-up and stream modes remain available for compatibility or latency tuning.</p></label>` : ""}
         ${w.core === "xray" && w.security === "reality" ? `<p class="form-note">xray REALITY allows only tcp / xhttp / grpc.</p>` : ""}
       </div></div>` : ""}
 
@@ -2627,7 +2630,8 @@
       transport_path: showT ? (w.transport_path || "").trim() || null : null,
       transport_host: showT ? (w.transport_host || "").trim() || null : null,
       transport_service_name: showT ? (w.transport_service_name || "").trim() || null : null,
-      transport_mode: showT && w.network === "xhttp" ? (w.transport_mode || "packet-up") : null,
+      transport_mode: showT && w.network === "xhttp" ? (w.transport_mode || "auto") : null,
+      utls_fingerprint: tls_enabled ? (w.utls_fingerprint || "qq") : null,
       shadowtls_handshake_server: w.kind === "shadowtls" ? (w.shadowtls_handshake_server || "").trim() || null : null,
       shadowtls_handshake_port: w.kind === "shadowtls" && w.shadowtls_handshake_port ? Number(w.shadowtls_handshake_port) : null,
       extra: (() => {
@@ -3200,8 +3204,8 @@
       <div class="form-row"><label><span>Short IDs</span><input name="reality_short_ids" value="${esc((entity?.reality_short_ids || []).join(","))}" placeholder="deadbeef,01234567"></label><label><span>Handshake</span><input name="reality_handshake_server" value="${esc(entity?.reality_handshake_server || "")}" placeholder="www.cloudflare.com"></label></div>
       <div class="form-row"><label><span>Handshake port</span><input name="reality_handshake_port" type="number" min="1" max="65535" value="${esc(entity?.reality_handshake_port || "")}" placeholder="443"></label><label><span>Network</span><select name="network">${wizNetworks(entity?.core || "singbox", entity?.reality ? "reality" : "tls").map((v) => option(v,v,entity?.network || "tcp")).join("")}</select></label></div>
       <div class="form-row"><label><span>Transport path</span><input name="transport_path" value="${esc(entity?.transport_path || "")}" placeholder="/honey"></label><label><span>Transport host</span><input name="transport_host" value="${esc(entity?.transport_host || "")}" placeholder="cdn.example.com"></label></div>
-      <div class="form-row"><label><span>gRPC service</span><input name="transport_service_name" value="${esc(entity?.transport_service_name || "")}" placeholder="honey"></label><label><span>xHTTP mode</span><select name="transport_mode">${["","auto","packet-up","stream-up","stream-one"].map((v) => option(v,v || "default",entity?.transport_mode || "")).join("")}</select></label></div>
-      <div class="form-row"><label><span>uTLS fingerprint</span><select name="utls_fingerprint">${["","chrome","firefox","safari","randomized"].map((v) => option(v,v || "default",entity?.utls_fingerprint || "")).join("")}</select></label><label><span>ECH</span><select name="ech">${option("false","off",String(entity?.ech ?? false))}${option("true","on",String(entity?.ech ?? false))}</select></label></div>
+      <div class="form-row"><label><span>gRPC service</span><input name="transport_service_name" value="${esc(entity?.transport_service_name || "")}" placeholder="honey"></label><label><span>xHTTP mode</span><select name="transport_mode">${["auto","packet-up","stream-up","stream-one"].map((v) => option(v,v,entity?.transport_mode || "auto")).join("")}</select></label></div>
+      <div class="form-row"><label><span>uTLS fingerprint</span><select name="utls_fingerprint">${["chrome","firefox","safari","ios","android","edge","360","qq","random","randomized"].map((v) => option(v,v,entity?.utls_fingerprint || "qq")).join("")}</select></label><label><span>ECH</span><select name="ech">${option("false","off",String(entity?.ech ?? false))}${option("true","on",String(entity?.ech ?? false))}</select></label></div>
       <div class="form-row"><label><span>ShadowTLS handshake</span><input name="shadowtls_handshake_server" value="${esc(entity?.shadowtls_handshake_server || "")}" placeholder="www.cloudflare.com"></label><label><span>ShadowTLS port</span><input name="shadowtls_handshake_port" type="number" min="1" max="65535" value="${esc(entity?.shadowtls_handshake_port || "")}" placeholder="443"></label></div>
       <label><span>Extra JSON</span><textarea name="extra" rows="4">${esc(JSON.stringify(entity?.extra || {}, null, 2))}</textarea></label>
       <p class="field-error"></p>`;
@@ -3260,7 +3264,7 @@
       if (editing) body.enabled = data.enabled === "true";
     } else {
       path = editing ? `/inbounds/${id}` : "/inbounds";
-      body = { tag: data.tag.trim(), kind: data.kind, core: data.core, listen_port: Number(data.listen_port), flow: data.flow.trim(), enabled: data.enabled === "true", tls_enabled: data.tls_enabled === "true", server_name: data.server_name.trim() || null, cert_path: data.cert_path.trim() || null, key_path: data.key_path.trim() || null, reality: data.reality === "true", reality_public_key: data.reality_public_key.trim() || null, reality_short_ids: data.reality_short_ids.split(",").map((v) => v.trim()).filter(Boolean), reality_handshake_server: data.reality_handshake_server.trim() || null, reality_handshake_port: data.reality_handshake_port ? Number(data.reality_handshake_port) : null, network: data.network, transport_path: data.transport_path.trim() || null, transport_host: data.transport_host.trim() || null, transport_service_name: data.transport_service_name.trim() || null, transport_mode: data.transport_mode || null, ech: data.ech === "true", utls_fingerprint: data.utls_fingerprint || null, shadowtls_handshake_server: data.shadowtls_handshake_server.trim() || null, shadowtls_handshake_port: data.shadowtls_handshake_port ? Number(data.shadowtls_handshake_port) : null, extra };
+      body = { tag: data.tag.trim(), kind: data.kind, core: data.core, listen_port: Number(data.listen_port), flow: data.flow.trim(), enabled: data.enabled === "true", tls_enabled: data.tls_enabled === "true", server_name: data.server_name.trim() || null, cert_path: data.cert_path.trim() || null, key_path: data.key_path.trim() || null, reality: data.reality === "true", reality_public_key: data.reality_public_key.trim() || null, reality_short_ids: data.reality_short_ids.split(",").map((v) => v.trim()).filter(Boolean), reality_handshake_server: data.reality_handshake_server.trim() || null, reality_handshake_port: data.reality_handshake_port ? Number(data.reality_handshake_port) : null, network: data.network, transport_path: data.transport_path.trim() || null, transport_host: data.transport_host.trim() || null, transport_service_name: data.transport_service_name.trim() || null, transport_mode: data.network === "xhttp" ? (data.transport_mode || "auto") : null, ech: data.ech === "true", utls_fingerprint: (data.tls_enabled === "true" || data.reality === "true") ? (data.utls_fingerprint || "qq") : null, shadowtls_handshake_server: data.shadowtls_handshake_server.trim() || null, shadowtls_handshake_port: data.shadowtls_handshake_port ? Number(data.shadowtls_handshake_port) : null, extra };
       if (!editing) body.node_id = data.node_id;
       if (data.reality_private_key) body.reality_private_key = data.reality_private_key;
     }
