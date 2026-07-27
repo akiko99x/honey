@@ -73,6 +73,7 @@ user="$(curl -fsS "${BASE}/users" "${AUTH[@]}" -d "{\"username\":\"smoke-${suffi
 user_id="$(jq -r .id <<<"$user")"
 uuid_before="$(jq -r .uuid <<<"$user")"
 sub_path="$(jq -r .subscription_path <<<"$user")"
+revocable_sub_path="$(jq -r .revocable_subscription_path <<<"$user")"
 onboarding_has user || fail "user did not advance onboarding"
 onboarding_has subscription || fail "subscription did not advance onboarding"
 curl -fsS "${BASE}/onboarding" "${AUTH[@]}" \
@@ -128,13 +129,14 @@ curl -fsS "${BASE}/nodes/${node_id}/enrollments" "${AUTH[@]}" \
 uuid_after="$(curl -fsS -X POST "${BASE}/users/${user_id}/rotate" "${AUTH[@]}" -d '{}' | jq -r .uuid)"
 [[ "$uuid_after" != "$uuid_before" && -n "$uuid_after" ]] || fail "credential rotation did not change uuid"
 
-# --- subscription-token rotation revokes the old link ----------------------
-old_sub_path="$sub_path"
-sub_path="$(curl -fsS -X POST "${BASE}/users/${user_id}/rotate-sub" "${AUTH[@]}" | jq -r .subscription_path)"
-[[ "$sub_path" != "$old_sub_path" && -n "$sub_path" ]] || fail "subscription rotation did not change the path"
-old_status="$(curl -sS -o /dev/null -w '%{http_code}' "${BASE}${old_sub_path}")"
-[[ "$old_status" == 404 ]] || fail "rotated-away subscription should 404, got ${old_status}"
-curl -fsS -H "accept: application/json" "${BASE}${sub_path}" | jq -e '.links | length == 1' >/dev/null || fail "new subscription broken after rotation"
+# --- optional token rotation revokes only the old revocable link -----------
+old_revocable_sub_path="$revocable_sub_path"
+revocable_sub_path="$(curl -fsS -X POST "${BASE}/users/${user_id}/rotate-sub" "${AUTH[@]}" | jq -r .subscription_path)"
+[[ "$revocable_sub_path" != "$old_revocable_sub_path" && -n "$revocable_sub_path" ]] || fail "revocable subscription rotation did not change the path"
+old_status="$(curl -sS -o /dev/null -w '%{http_code}' "${BASE}${old_revocable_sub_path}")"
+[[ "$old_status" == 404 ]] || fail "rotated-away revocable subscription should 404, got ${old_status}"
+curl -fsS -H "accept: application/json" "${BASE}${sub_path}" | jq -e '.links | length == 1' >/dev/null || fail "permanent subscription broke after optional token rotation"
+curl -fsS -H "accept: application/json" "${BASE}${revocable_sub_path}" | jq -e '.links | length == 1' >/dev/null || fail "new revocable subscription broken after rotation"
 
 # --- periodic quota setting is persisted -----------------------------------
 curl -fsS -X PUT "${BASE}/users/${user_id}/quota-interval" "${AUTH[@]}" -d '{"interval":"daily"}' >/dev/null
