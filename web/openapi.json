@@ -2,7 +2,7 @@
     "openapi":  "3.0.3",
     "info":  {
                  "title":  "honey master API",
-                 "version":  "0.1.0",
+                 "version":  "0.1.1",
                  "description":  "Stable automation surface for honey. Create a named key in Settings, store the hny_ token once, and send it as Authorization: Bearer \u003ctoken\u003e. API keys use the same owner/admin/operator/viewer permission ladder as panel accounts."
              },
     "servers":  [
@@ -1582,6 +1582,11 @@
                                                                           "enabled":  {
                                                                                           "type":  "boolean"
                                                                                       },
+                                                                          "udp_idle_timeout":  {
+                                                                                                   "type":  "string",
+                                                                                                   "default":  "60s",
+                                                                                                   "description":  "Official Hysteria2 UDP idle timeout"
+                                                                                               },
                                                                           "reachable":  {
                                                                                             "type":  "boolean",
                                                                                             "nullable":  true
@@ -1624,7 +1629,12 @@
                                                                              "enabled":  {
                                                                                              "type":  "boolean",
                                                                                              "default":  true
-                                                                                         }
+                                                                                         },
+                                                                             "udp_idle_timeout":  {
+                                                                                                      "type":  "string",
+                                                                                                      "default":  "60s",
+                                                                                                      "description":  "Official Hysteria2 UDP idle timeout"
+                                                                                                  }
                                                                          },
                                                           "additionalProperties":  true
                                                       },

@@ -28,7 +28,7 @@ import (
 	"github.com/akiko99x/honey/agent/internal/xrayacme"
 )
 
-const agentVersion = "0.1.0"
+const agentVersion = "0.1.1"
 
 // Server implements honeyv1.AgentServiceServer.
 type Server struct {
@@ -328,7 +328,8 @@ func (s *Server) Validate(ctx context.Context, req *honeyv1.ApplyRequest) (*hone
 func (s *Server) validateCandidate(spec core.Spec) (map[string]string, []string, error) {
 	byCore := map[string][]core.Inbound{}
 	for _, ib := range spec.Inbounds {
-		byCore[coreOf(ib.Core)] = append(byCore[coreOf(ib.Core)], ib)
+		kind := coreOfInbound(ib)
+		byCore[kind] = append(byCore[kind], ib)
 	}
 
 	kinds := make([]string, 0, len(s.cores))
@@ -376,7 +377,7 @@ func (s *Server) Start(ctx context.Context, req *honeyv1.StartRequest) (*honeyv1
 
 	cleanup := func() {}
 	var err error
-	if kind == "xray" {
+	if kind == "xray" || kind == "hysteria" {
 		cleanup, err = s.prepareACME(ctx, &spec, true)
 	}
 	if err != nil {
@@ -424,6 +425,11 @@ func (s *Server) Stats(req *honeyv1.StatsRequest, stream honeyv1.AgentService_St
 	}
 
 	return mgr.StatsLoop(stream.Context(), interval, func(st core.Stat) error {
+		if kind == "singbox" {
+			if native, ok := s.cores["hysteria"].(interface{ Latest() core.Stat }); ok {
+				st = mergeStats(st, native.Latest())
+			}
+		}
 		users := make([]*honeyv1.UserStat, 0, len(st.Users))
 		for _, ut := range st.Users {
 			users = append(users, &honeyv1.UserStat{Name: ut.Name, UpBytes: ut.Up, DownBytes: ut.Down})
@@ -439,6 +445,31 @@ func (s *Server) Stats(req *honeyv1.StatsRequest, stream honeyv1.AgentService_St
 			Users:       users,
 		})
 	})
+}
+
+func mergeStats(left, right core.Stat) core.Stat {
+	left.NodeUp += right.NodeUp
+	left.NodeDown += right.NodeDown
+	left.UpSpeed += right.UpSpeed
+	left.DownSpeed += right.DownSpeed
+	left.Connections += right.Connections
+	users := make(map[string]core.UserTraffic, len(left.Users)+len(right.Users))
+	for _, user := range left.Users {
+		users[user.Name] = user
+	}
+	for _, user := range right.Users {
+		current := users[user.Name]
+		current.Name = user.Name
+		current.Up += user.Up
+		current.Down += user.Down
+		users[user.Name] = current
+	}
+	left.Users = left.Users[:0]
+	for _, user := range users {
+		left.Users = append(left.Users, user)
+	}
+	sort.Slice(left.Users, func(i, j int) bool { return left.Users[i].Name < left.Users[j].Name })
+	return left
 }
 
 // Connections returns a point-in-time snapshot of active connections for the
@@ -558,7 +589,8 @@ func (s *Server) ConfigDrift(_ context.Context, req *honeyv1.ConfigDriftRequest)
 	}
 	byCore := map[string][]core.Inbound{}
 	for _, ib := range spec.Inbounds {
-		byCore[coreOf(ib.Core)] = append(byCore[coreOf(ib.Core)], ib)
+		kind := coreOfInbound(ib)
+		byCore[kind] = append(byCore[kind], ib)
 	}
 	kinds := make([]string, 0, len(s.cores))
 	for kind := range s.cores {
@@ -765,18 +797,29 @@ func coreKey(k honeyv1.CoreKind) string {
 	return "singbox"
 }
 
-// coreOf normalises an inbound's core field ("" -> singbox).
+// coreOf keeps the existing database/API default ("singbox") compatible while
+// routing Hysteria2 through the official Hysteria server process.
 func coreOf(k string) string {
 	if k == "xray" {
 		return "xray"
 	}
+	if k == "hysteria" {
+		return "hysteria"
+	}
 	return "singbox"
+}
+
+func coreOfInbound(ib core.Inbound) string {
+	if ib.Type == "hysteria2" && (ib.Core == "" || ib.Core == "singbox") {
+		return "hysteria"
+	}
+	return coreOf(ib.Core)
 }
 
 func filterCore(ins []core.Inbound, kind string) []core.Inbound {
 	out := make([]core.Inbound, 0, len(ins))
 	for _, ib := range ins {
-		if coreOf(ib.Core) == kind {
+		if coreOfInbound(ib) == kind {
 			out = append(out, ib)
 		}
 	}

@@ -6,7 +6,7 @@ application processes run in containers:
 
 - PostgreSQL 17 with a persistent named volume;
 - honey master and migration job;
-- honey agent with bundled sing-box and Xray;
+- honey agent with bundled sing-box, Xray and the official Hysteria 2 server;
 - Caddy on the host network;
 - a PostgreSQL 17 backup container.
 

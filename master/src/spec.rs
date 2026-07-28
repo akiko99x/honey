@@ -265,7 +265,26 @@ pub async fn build_node_spec(pool: &PgPool, node_id: Uuid) -> Result<pb::NodeSpe
         };
 
         // pass extra through only when it carries something.
-        let extra_json = match &ib.extra {
+        let mut extra_value = match &ib.extra {
+            Json::Null => Json::Object(Default::default()),
+            Json::Object(m) if m.is_empty() => Json::Object(Default::default()),
+            v => v.clone(),
+        };
+        // The official Hysteria server exposes this as a first-class setting.
+        // Keep it in the wire escape hatch for backwards-compatible agents.
+        if ib.kind == "hysteria2" {
+            if let Json::Object(ref mut object) = extra_value {
+                object.insert(
+                    "udpIdleTimeout".into(),
+                    Json::String(if ib.udp_idle_timeout.trim().is_empty() {
+                        "60s".into()
+                    } else {
+                        ib.udp_idle_timeout.clone()
+                    }),
+                );
+            }
+        }
+        let extra_json = match &extra_value {
             Json::Null => String::new(),
             Json::Object(m) if m.is_empty() => String::new(),
             v => serde_json::to_string(v)?,

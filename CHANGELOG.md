@@ -5,6 +5,19 @@ version tags and is currently pre-stable.
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-07-29
+
+### Added
+
+- Official Hysteria 2 server core managed by honey-agent.
+- Per-inbound UDP idle timeout setting for Hysteria2.
+- Native Hysteria traffic-statistics integration.
+
+### Changed
+
+- Existing Hysteria2 inbounds are automatically routed from sing-box to the official Hysteria server.
+
+
 ## [0.1.0] - 2026-07-28
 
 ### Added
@@ -197,7 +210,8 @@ version tags and is currently pre-stable.
 - GitHub Actions for tests, database recovery, secret scanning and release
   packaging.
 
-[Unreleased]: https://github.com/akiko99x/honey/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/akiko99x/honey/compare/v0.1.1...HEAD
+[0.1.1]: https://github.com/akiko99x/honey/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/akiko99x/honey/compare/v0.0.13...v0.1.0
 [0.0.13]: https://github.com/akiko99x/honey/compare/v0.0.12...v0.0.13
 [0.0.12]: https://github.com/akiko99x/honey/compare/v0.0.11...v0.0.12

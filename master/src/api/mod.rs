@@ -7631,6 +7631,19 @@ fn validate_inbound(input: &NewInbound) -> Result<(), ApiError> {
             "shadowtls requires a handshake server",
         ));
     }
+    if input.udp_idle_timeout.trim().is_empty() {
+        return Err(ApiError::bad_request("udp_idle_timeout must not be empty"));
+    }
+    if input.udp_idle_timeout.len() > 32
+        || !input
+            .udp_idle_timeout
+            .chars()
+            .all(|c| c.is_ascii_digit() || matches!(c, 's' | 'm' | 'h' | 'd' | '.'))
+    {
+        return Err(ApiError::bad_request(
+            "udp_idle_timeout must be a duration such as 60s or 5m",
+        ));
+    }
     Ok(())
 }
 
@@ -7712,6 +7725,13 @@ fn validate_update_inbound(input: &UpdateInbound) -> Result<(), ApiError> {
         .is_some_and(|v| !matches!(v, "singbox" | "xray"))
     {
         return Err(ApiError::bad_request("core must be singbox or xray"));
+    }
+    if input
+        .udp_idle_timeout
+        .as_deref()
+        .is_some_and(|v| v.trim().is_empty())
+    {
+        return Err(ApiError::bad_request("udp_idle_timeout must not be empty"));
     }
     if input
         .listen_port
@@ -8356,6 +8376,7 @@ mod tests {
             cdn_pool: vec![],
             up_mbps: 0,
             down_mbps: 0,
+            udp_idle_timeout: "60s".into(),
             upstream_inbound_id: None,
         }
     }
@@ -8401,6 +8422,7 @@ mod tests {
             cdn_pool: vec![],
             up_mbps: 0,
             down_mbps: 0,
+            udp_idle_timeout: "60s".into(),
             upstream_inbound_id: None,
             chain_uuid: None,
             chain_password: None,

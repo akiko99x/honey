@@ -27,6 +27,8 @@ exec /usr/local/bin/honey-agent \
 	--xray-bin /usr/local/bin/xray \
 	--xray-config /etc/honey/xray/config.json \
 	--xray-api "${HONEY_XRAY_API:-127.0.0.1:8081}" \
+	--hysteria-bin /usr/local/bin/hysteria \
+	--hysteria-config /etc/honey/hysteria/config.json \
 	--xray-acme-root "${HONEY_XRAY_ACME_ROOT:-/etc/honey/xray/acme}" \
 	--xray-acme-listen "${HONEY_XRAY_ACME_LISTEN:-127.0.0.1:9080}" \
 	--singbox-acme-upstream "${HONEY_SINGBOX_ACME_UPSTREAM:-127.0.0.1:9082}"

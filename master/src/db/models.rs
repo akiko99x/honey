@@ -661,6 +661,9 @@ pub struct Inbound {
     pub up_mbps: i32,
     #[serde(default)]
     pub down_mbps: i32,
+    // Official Hysteria2 UDP idle timeout, e.g. "60s".
+    #[serde(default = "default_udp_idle_timeout")]
+    pub udp_idle_timeout: String,
     // multihop: the exit inbound this entry chains to (null = egress directly).
     #[serde(default)]
     pub upstream_inbound_id: Option<Uuid>,
@@ -974,12 +977,18 @@ pub struct NewInbound {
     pub up_mbps: i32,
     #[serde(default)]
     pub down_mbps: i32,
+    #[serde(default = "default_udp_idle_timeout")]
+    pub udp_idle_timeout: String,
     #[serde(default)]
     pub upstream_inbound_id: Option<Uuid>,
 }
 
 fn default_network() -> String {
     "tcp".into()
+}
+
+fn default_udp_idle_timeout() -> String {
+    "60s".into()
 }
 
 fn default_utls_fingerprint() -> Option<String> {
@@ -1036,6 +1045,7 @@ pub struct UpdateInbound {
     pub cdn_pool: Option<Vec<String>>,
     pub up_mbps: Option<i32>,
     pub down_mbps: Option<i32>,
+    pub udp_idle_timeout: Option<String>,
     #[serde(default)]
     pub upstream_inbound_id: Patch<Uuid>,
 }

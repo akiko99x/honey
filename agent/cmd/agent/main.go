@@ -25,6 +25,7 @@ import (
 	"github.com/akiko99x/honey/agent/internal/config"
 	"github.com/akiko99x/honey/agent/internal/core"
 	"github.com/akiko99x/honey/agent/internal/grpcserver"
+	"github.com/akiko99x/honey/agent/internal/hysteria"
 	"github.com/akiko99x/honey/agent/internal/logx"
 	"github.com/akiko99x/honey/agent/internal/mtls"
 	"github.com/akiko99x/honey/agent/internal/singbox"
@@ -42,13 +43,17 @@ func main() {
 		logx.Fatal(logx.AgentMTLSFailed, "mtls setup failed, can't trust anyone: %v", err)
 	}
 
-	// two parallel cores on one node: sing-box (priority) + xray.
+	// sing-box and Xray remain available for their existing protocols. Native
+	// Hysteria2 is managed separately because its official server is a distinct
+	// process/config format.
 	clash := singbox.NewClash(cfg.ClashURL, cfg.ClashSecret)
 	sb := singbox.NewManager(cfg.SingboxBin, cfg.SingboxConfig, clash)
 	xr := xray.NewManager(cfg.XrayBin, cfg.XrayConfig, cfg.XrayAPI)
+	hy := hysteria.NewManager(cfg.HysteriaBin, cfg.HysteriaConfig)
 	cores := map[string]core.Manager{
-		"singbox": sb,
-		"xray":    xr,
+		"singbox":  sb,
+		"xray":     xr,
+		"hysteria": hy,
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
@@ -60,10 +65,16 @@ func main() {
 	)
 	certManager.SetReload(func() error {
 		state, _, _ := xr.Status()
-		if state != core.StateRunning {
-			return nil
+		if state == core.StateRunning {
+			if err := xr.Apply(""); err != nil {
+				return err
+			}
 		}
-		return xr.Apply("")
+		hyState, _, _ := hy.Status()
+		if hyState == core.StateRunning {
+			return hy.Apply("")
+		}
+		return nil
 	})
 	if err := certManager.Start(ctx); err != nil {
 		logx.Fatal(logx.AgentACMEGateway, "Xray ACME gateway failed: %v", err)
@@ -80,13 +91,15 @@ func main() {
 	// now instead of waiting in StateStopped for the next push. sing-box first.
 	recoverCore("singbox", cores["singbox"], cfg.SingboxConfig)
 	recoverCore("xray", cores["xray"], cfg.XrayConfig)
+	recoverCore("hysteria", cores["hysteria"], cfg.HysteriaConfig)
 
 	// one grpc server, shared by every transport. mTLS is enforced here, so the
 	// transports stay pure connection plumbing.
 	srv := grpc.NewServer(grpc.Creds(credentials.NewTLS(tlsCfg)))
 	agentSrv := grpcserver.New(cfg.NodeID, cores, map[string]string{
-		"singbox": cfg.SingboxConfig,
-		"xray":    cfg.XrayConfig,
+		"singbox":  cfg.SingboxConfig,
+		"xray":     cfg.XrayConfig,
+		"hysteria": cfg.HysteriaConfig,
 	})
 	agentSrv.SetStatsEpoch(statsStore.Epoch)
 	agentSrv.SetACMEManager(certManager)
@@ -115,7 +128,7 @@ func main() {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		accountingLoop(ctx, sb, agentSrv, statsStore)
+		accountingLoop(ctx, sb, hy, agentSrv, statsStore)
 	}()
 
 	<-ctx.Done()
@@ -125,7 +138,7 @@ func main() {
 	wg.Wait()
 }
 
-func accountingLoop(ctx context.Context, sb *singbox.Manager, srv *grpcserver.Server, store *accounting.Store) {
+func accountingLoop(ctx context.Context, sb *singbox.Manager, hy *hysteria.Manager, srv *grpcserver.Server, store *accounting.Store) {
 	ticker := time.NewTicker(2 * time.Second)
 	defer ticker.Stop()
 	var ticks uint64
@@ -134,6 +147,7 @@ func accountingLoop(ctx context.Context, sb *singbox.Manager, srv *grpcserver.Se
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
+			hy.Poll(ctx)
 			if !sb.Poll(ctx) {
 				continue // clash unreachable this tick
 			}

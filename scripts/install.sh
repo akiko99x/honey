@@ -86,7 +86,7 @@ id honey >/dev/null 2>&1 ||
 install -d -o honey -g honey -m 0750 /opt/honey/bin
 install -d -o honey -g honey -m 0750 \
 	/etc/honey /etc/honey/certs /etc/honey/master-certs \
-	/etc/honey/sing-box /etc/honey/xray
+	/etc/honey/sing-box /etc/honey/xray /etc/honey/hysteria
 install -d -o honey -g honey -m 0750 /var/lib/honey
 install -d -o honey -g honey -m 0700 /var/lib/honey/backups
 install -o honey -g honey -m 0755 "$MASTER_BIN" /opt/honey/bin/honey-master
@@ -104,6 +104,11 @@ done
 	install -o honey -g honey -m 0600 "$install_root/deploy/systemd/master.env.example" /etc/honey/master.env
 [[ -f /etc/honey/agent.env ]] ||
 	install -o honey -g honey -m 0600 "$install_root/deploy/systemd/agent.env.example" /etc/honey/agent.env
+if ! grep -q '^HONEY_HYSTERIA_BIN=' /etc/honey/agent.env; then
+	printf '\nHONEY_HYSTERIA_BIN=/usr/local/bin/hysteria\n' >> /etc/honey/agent.env
+	chown honey:honey /etc/honey/agent.env
+	chmod 0600 /etc/honey/agent.env
+fi
 if [[ -n "$update_repo" ]]; then
 	if grep -q '^HONEY_UPDATE_REPO=' /etc/honey/master.env; then
 		sed -i "s|^HONEY_UPDATE_REPO=.*|HONEY_UPDATE_REPO=$update_repo|" /etc/honey/master.env

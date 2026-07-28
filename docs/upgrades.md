@@ -61,7 +61,7 @@ rm -f /tmp/honey-bootstrap.sh
 
 The bootstrap installs PostgreSQL and Caddy, asks for the panel domain/path and
 owner credentials, creates the database and master mTLS identity, and starts
-the panel behind Caddy. It can also install verified sing-box/Xray releases and
+the panel behind Caddy. It can also install verified sing-box/Xray/Hysteria releases and
 enroll the host as the first local node. Use it on a clean Ubuntu/Debian host;
 use `--force` only after reviewing the timestamped configuration backups it
 creates.

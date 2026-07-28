@@ -21,9 +21,11 @@ type Config struct {
 	ClashURL    string // sing-box Clash API base, e.g. http://127.0.0.1:9090
 	ClashSecret string // Clash API secret, if set
 
-	XrayBin    string // path to xray binary
-	XrayConfig string // where the agent writes xray config.json
-	XrayAPI    string // xray gRPC stats api addr (stats collection TBD)
+	XrayBin        string // path to xray binary
+	XrayConfig     string // where the agent writes xray config.json
+	XrayAPI        string // xray gRPC stats api addr (stats collection TBD)
+	HysteriaBin    string // path to official Hysteria binary
+	HysteriaConfig string // where the agent writes Hysteria server config
 
 	XrayACMERoot        string // persistent Xray ACME cache + exported PEMs
 	XrayACMEListen      string // local HTTP-01 gateway
@@ -47,6 +49,8 @@ func Parse() *Config {
 	flag.StringVar(&c.XrayBin, "xray-bin", "/usr/local/bin/xray", "xray binary")
 	flag.StringVar(&c.XrayConfig, "xray-config", "/etc/honey/xray/config.json", "xray config path")
 	flag.StringVar(&c.XrayAPI, "xray-api", "127.0.0.1:8081", "xray grpc stats api addr")
+	flag.StringVar(&c.HysteriaBin, "hysteria-bin", "/usr/local/bin/hysteria", "official Hysteria binary")
+	flag.StringVar(&c.HysteriaConfig, "hysteria-config", "/etc/honey/hysteria/config.json", "Hysteria server config path")
 	flag.StringVar(&c.XrayACMERoot, "xray-acme-root", "/etc/honey/xray/acme", "Xray ACME state directory")
 	flag.StringVar(&c.XrayACMEListen, "xray-acme-listen", "127.0.0.1:9080", "Xray ACME HTTP-01 gateway")
 	flag.StringVar(&c.SingboxACMEUpstream, "singbox-acme-upstream", "127.0.0.1:9082", "sing-box ACME listener behind the gateway")

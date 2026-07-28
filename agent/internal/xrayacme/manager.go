@@ -261,7 +261,7 @@ func (m *Manager) requests(spec *core.Spec) (map[string]request, map[string]bool
 		if err != nil {
 			return nil, nil, fmt.Errorf("inbound %q ACME: %w", inbound.Tag, err)
 		}
-		if inbound.Core != "xray" {
+		if inbound.Core != "xray" && inbound.Core != "hysteria" && inbound.Type != "hysteria2" {
 			singbox[domain] = true
 			continue
 		}
@@ -640,7 +640,7 @@ func (m *Manager) renewLoop(ctx context.Context) {
 func (m *Manager) injectPaths(spec *core.Spec, requests map[string]request, temporary map[string][2]string) {
 	for i := range spec.Inbounds {
 		inbound := &spec.Inbounds[i]
-		if inbound.Core != "xray" || inbound.TLS == nil {
+		if inbound.Core != "xray" && inbound.Core != "hysteria" && inbound.Type != "hysteria2" || inbound.TLS == nil {
 			continue
 		}
 		domain := strings.ToLower(strings.TrimSpace(inbound.TLS.ServerName))
@@ -660,7 +660,7 @@ func (m *Manager) rewriteSingboxPorts(spec *core.Spec) {
 	upstream := listenPort(m.singboxUpstream)
 	for i := range spec.Inbounds {
 		inbound := &spec.Inbounds[i]
-		if inbound.Core == "xray" || len(inbound.ExtraJSON) == 0 {
+		if inbound.Core == "xray" || inbound.Core == "hysteria" || inbound.Type == "hysteria2" || len(inbound.ExtraJSON) == 0 {
 			continue
 		}
 		var extra map[string]any

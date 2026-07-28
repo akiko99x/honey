@@ -1206,10 +1206,10 @@ pub async fn create_inbound(pool: &PgPool, inbound: NewInbound) -> Result<Inboun
             reality_handshake_server, reality_handshake_port,
             network, transport_path, transport_host, transport_service_name, transport_mode,
             ech, utls_fingerprint, shadowtls_handshake_server, shadowtls_handshake_port, extra,
-            fallback_host, sni_pool, up_mbps, down_mbps,
+            fallback_host, sni_pool, up_mbps, down_mbps, udp_idle_timeout,
             upstream_inbound_id, chain_uuid, chain_password, cdn_pool)
          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,
-                 $17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34)
+                 $17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,$35)
          RETURNING *",
         )
         .bind(inbound.node_id)
@@ -1242,6 +1242,11 @@ pub async fn create_inbound(pool: &PgPool, inbound: NewInbound) -> Result<Inboun
         .bind(inbound.sni_pool)
         .bind(inbound.up_mbps.max(0))
         .bind(inbound.down_mbps.max(0))
+        .bind(if inbound.udp_idle_timeout.trim().is_empty() {
+            "60s".to_string()
+        } else {
+            inbound.udp_idle_timeout
+        })
         .bind(inbound.upstream_inbound_id)
         .bind(chain_uuid)
         .bind(chain_password)
@@ -1320,10 +1325,11 @@ pub async fn update_inbound(
            sni_pool = COALESCE($44, sni_pool),
            up_mbps = COALESCE($45, up_mbps),
            down_mbps = COALESCE($46, down_mbps),
-           upstream_inbound_id = CASE WHEN $47 THEN $48 ELSE upstream_inbound_id END,
-           chain_uuid = CASE WHEN $47 THEN $49 ELSE chain_uuid END,
-           chain_password = CASE WHEN $47 THEN $50 ELSE chain_password END,
-           cdn_pool = COALESCE($51, cdn_pool)
+           udp_idle_timeout = COALESCE($47, udp_idle_timeout),
+           upstream_inbound_id = CASE WHEN $48 THEN $49 ELSE upstream_inbound_id END,
+           chain_uuid = CASE WHEN $48 THEN $50 ELSE chain_uuid END,
+           chain_password = CASE WHEN $48 THEN $51 ELSE chain_password END,
+           cdn_pool = COALESCE($52, cdn_pool)
          WHERE id = $1 RETURNING *",
         )
         .bind(id)
@@ -1372,6 +1378,13 @@ pub async fn update_inbound(
         .bind(inbound.sni_pool)
         .bind(inbound.up_mbps.map(|v| v.max(0)))
         .bind(inbound.down_mbps.map(|v| v.max(0)))
+        .bind(inbound.udp_idle_timeout.map(|v| {
+            if v.trim().is_empty() {
+                "60s".to_string()
+            } else {
+                v
+            }
+        }))
         .bind(up_set)
         .bind(up_val)
         .bind(chain_uuid)

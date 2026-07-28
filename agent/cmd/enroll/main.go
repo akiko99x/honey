@@ -122,7 +122,7 @@ func main() {
 	if mode == "" {
 		mode = "serve"
 	}
-	env := fmt.Sprintf("HONEY_MODE=%s\nHONEY_LISTEN=%s\nHONEY_MASTER_ADDR=%s\nHONEY_NODE_ID=%s\nHONEY_SINGBOX_BIN=/usr/local/bin/sing-box\nHONEY_XRAY_BIN=/usr/local/bin/xray\nHONEY_CLASH_URL=http://127.0.0.1:9090\nHONEY_CLASH_SECRET=\n", mode, *listen, *masterAddr, claim.NodeID)
+	env := fmt.Sprintf("HONEY_MODE=%s\nHONEY_LISTEN=%s\nHONEY_MASTER_ADDR=%s\nHONEY_NODE_ID=%s\nHONEY_SINGBOX_BIN=/usr/local/bin/sing-box\nHONEY_XRAY_BIN=/usr/local/bin/xray\nHONEY_HYSTERIA_BIN=/usr/local/bin/hysteria\nHONEY_CLASH_URL=http://127.0.0.1:9090\nHONEY_CLASH_SECRET=\n", mode, *listen, *masterAddr, claim.NodeID)
 	if err := writeAtomic(*envFile, []byte(env), 0o600); err != nil {
 		fatal(err)
 	}

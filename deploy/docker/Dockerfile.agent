@@ -12,6 +12,7 @@ RUN cd agent \
 FROM debian:bookworm-slim AS cores
 ARG SINGBOX_VERSION=v1.13.14
 ARG XRAY_VERSION=v26.3.27
+ARG HYSTERIA_VERSION=latest
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
        bash ca-certificates curl python3 tar unzip coreutils \
@@ -22,7 +23,7 @@ RUN --mount=type=secret,id=GITHUB_TOKEN \
       export GITHUB_TOKEN="$(cat /run/secrets/GITHUB_TOKEN)"; \
     fi \
     && chmod 0755 /usr/local/bin/fetch-release-asset \
-    && mkdir -p /out /tmp/sing-box /tmp/xray \
+    && mkdir -p /out /tmp/sing-box /tmp/xray /tmp/hysteria \
     && archive="$(fetch-release-asset SagerNet/sing-box "$SINGBOX_VERSION" \
        'sing-box-[0-9A-Za-z.-]+-linux-amd64\.tar\.gz' /tmp/sing-box)" \
     && tar -xzf "$archive" -C /tmp/sing-box \
@@ -30,29 +31,33 @@ RUN --mount=type=secret,id=GITHUB_TOKEN \
     && archive="$(fetch-release-asset XTLS/Xray-core "$XRAY_VERSION" \
        'Xray-linux-64\.zip' /tmp/xray)" \
     && unzip -q "$archive" -d /tmp/xray/unpacked \
-    && install -m 0755 /tmp/xray/unpacked/xray /out/xray
+    && install -m 0755 /tmp/xray/unpacked/xray /out/xray \
+    && archive="$(fetch-release-asset apernet/hysteria "$HYSTERIA_VERSION" \
+       'hysteria-linux-amd64' /tmp/hysteria)" \
+    && install -m 0755 "$archive" /out/hysteria
 
 FROM caddy:2-alpine AS caddy-binary
 
 FROM debian:bookworm-slim
 LABEL org.opencontainers.image.source="https://github.com/akiko99x/honey" \
-      org.opencontainers.image.description="honey VPN node agent with sing-box and Xray"
+      org.opencontainers.image.description="honey VPN node agent with sing-box, Xray and Hysteria"
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
        bash ca-certificates curl iproute2 iptables nftables wireguard-tools \
     && rm -rf /var/lib/apt/lists/* \
     && install -d -m 0750 \
-       /etc/honey /etc/honey/certs /etc/honey/sing-box /etc/honey/xray \
+       /etc/honey /etc/honey/certs /etc/honey/sing-box /etc/honey/xray /etc/honey/hysteria \
        /etc/wireguard /var/lib/honey
 
 COPY --from=honey-builder /out/honey-agent /usr/local/bin/honey-agent
 COPY --from=honey-builder /out/honey-enroll /usr/local/bin/honey-enroll
 COPY --from=cores /out/sing-box /usr/local/bin/sing-box
 COPY --from=cores /out/xray /usr/local/bin/xray
+COPY --from=cores /out/hysteria /usr/local/bin/hysteria
 COPY --from=caddy-binary /usr/bin/caddy /usr/local/bin/caddy
 COPY deploy/docker/agent-entrypoint.sh /usr/local/bin/honey-agent-entrypoint
 RUN chmod 0755 /usr/local/bin/honey-agent /usr/local/bin/honey-enroll \
-    /usr/local/bin/sing-box /usr/local/bin/xray /usr/local/bin/caddy \
+    /usr/local/bin/sing-box /usr/local/bin/xray /usr/local/bin/hysteria /usr/local/bin/caddy \
     /usr/local/bin/honey-agent-entrypoint
 
 WORKDIR /var/lib/honey

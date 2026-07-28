@@ -114,7 +114,7 @@ type WgPeer struct {
 }
 
 type Inbound struct {
-	Core      string // "singbox" | "xray"
+	Core      string // "singbox" | "xray" | "hysteria"
 	Tag       string
 	Type      string
 	Listen    string
@@ -125,6 +125,9 @@ type Inbound struct {
 	ExtraJSON json.RawMessage
 	UpMbps    uint32 // bandwidth cap (Mbps), 0 = unlimited; hysteria2
 	DownMbps  uint32
+	// UdpIdleTimeout is the native Hysteria server idle timeout, e.g. "60s".
+	// It is ignored by other protocols and cores.
+	UdpIdleTimeout string
 	// multihop: a full sing-box outbound (JSON) to the exit inbound. When set,
 	// the agent adds it and routes this inbound's traffic through it.
 	UpstreamOutboundJSON string

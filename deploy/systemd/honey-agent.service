@@ -15,7 +15,8 @@ ExecStart=/opt/honey/bin/honey-agent \
   --node-id ${HONEY_NODE_ID} \
   --singbox-bin ${HONEY_SINGBOX_BIN} --singbox-config /etc/honey/sing-box/config.json \
   --clash-url ${HONEY_CLASH_URL} --clash-secret ${HONEY_CLASH_SECRET} \
-  --xray-bin ${HONEY_XRAY_BIN} --xray-config /etc/honey/xray/config.json
+  --xray-bin ${HONEY_XRAY_BIN} --xray-config /etc/honey/xray/config.json \
+  --hysteria-bin ${HONEY_HYSTERIA_BIN} --hysteria-config /etc/honey/hysteria/config.json
 Restart=on-failure
 RestartSec=2
 LimitNOFILE=1048576
@@ -29,7 +30,7 @@ ProtectKernelModules=true
 ProtectControlGroups=true
 RestrictSUIDSGID=true
 LockPersonality=true
-ReadWritePaths=/etc/honey/sing-box /etc/honey/xray
+ReadWritePaths=/etc/honey/sing-box /etc/honey/xray /etc/honey/hysteria
 RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK
 
 [Install]

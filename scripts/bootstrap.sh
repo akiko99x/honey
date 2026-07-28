@@ -5,7 +5,7 @@
 # downloads a verified honey release, creates the database and owner account,
 # generates the master mTLS identity, configures the panel domain and starts
 # the supervised services. By default it also installs verified sing-box/Xray
-# releases and enrolls this host as the first serve-mode VPN node.
+# and official Hysteria releases and enrolls this host as the first serve-mode VPN node.
 set -euo pipefail
 
 usage() {
@@ -205,7 +205,7 @@ install_args=(--repo "$repo" --version "$version")
 bash "$downloader" "${install_args[@]}"
 
 if ((install_local_node)); then
-	echo "[3/10] downloading verified sing-box and Xray cores"
+	echo "[3/10] downloading verified sing-box, Xray and Hysteria cores"
 	singbox_archive="$(
 		download_verified_github_asset \
 			SagerNet/sing-box "${HONEY_SINGBOX_VERSION:-latest}" \
@@ -224,6 +224,13 @@ if ((install_local_node)); then
 	unzip -q "$xray_archive" -d "$work/xray/unpacked"
 	[[ -f "$work/xray/unpacked/xray" ]] || { echo "Xray binary missing from release" >&2; exit 1; }
 	install -o root -g root -m 0755 "$work/xray/unpacked/xray" /usr/local/bin/xray
+
+	hysteria_binary="$(
+		download_verified_github_asset \
+			apernet/hysteria "${HONEY_HYSTERIA_VERSION:-latest}" \
+			'hysteria-linux-amd64' "$work/hysteria"
+	)"
+	install -o root -g root -m 0755 "$hysteria_binary" /usr/local/bin/hysteria
 fi
 
 echo "[4/10] creating PostgreSQL database"
