@@ -117,6 +117,7 @@ start_agent() {
 		--ca "$WORK/agent-certs/ca.crt" --cert "$WORK/agent-certs/agent.crt" --key "$WORK/agent-certs/agent.key" \
 		--singbox-bin "$WORK/fake-core" --singbox-config "$WORK/config/sing-box.json" \
 		--xray-bin "$WORK/fake-core" --xray-config "$WORK/config/xray.json" \
+		--hysteria-bin "$WORK/fake-core" --hysteria-config "$WORK/config/hysteria.json" \
 		--clash-url "http://127.0.0.1:1" --xray-api "127.0.0.1:1" \
 		>>"$WORK/agent.log" 2>&1 &
 	agent_pid=$!
@@ -164,7 +165,13 @@ curl -fsS -X POST "$BASE/nodes/$node_id/dry-run" "${AUTH[@]}" -d '{}' \
 	|| { echo "dry-run mutated live agent state" >&2; exit 1; }
 
 echo "[lifecycle] apply and persist a recovery-authorized config"
-curl -fsS -X POST "$BASE/nodes/$node_id/push" "${AUTH[@]}" -d '{}' | jq -e '.state == "Running"' >/dev/null
+push_response="$(curl -sS -X POST "$BASE/nodes/$node_id/push" "${AUTH[@]}" -d '{}' || true)"
+if ! jq -e '.state == "Running"' <<<"$push_response" >/dev/null 2>&1; then
+	echo "push failed: $push_response" >&2
+	echo "--- agent log ---" >&2
+	tail -n 120 "$WORK/agent.log" >&2 || true
+	exit 1
+fi
 [[ -s "$WORK/config/xray.json" && -s "$WORK/config/xray.json.honey-state.json" ]] || { echo "apply did not persist config and marker" >&2; exit 1; }
 jq -e '.version == 1 and .active == true and (.sha256 | length == 64)' "$WORK/config/xray.json.honey-state.json" >/dev/null
 curl -fsS "$BASE/nodes/$node_id/config-preview" "${AUTH[@]}" \
@@ -180,6 +187,7 @@ setsid "$AGENT_BIN" \
 	--ca "$WORK/agent-certs/ca.crt" --cert "$WORK/agent-certs/agent.crt" --key "$WORK/agent-certs/agent.key" \
 	--singbox-bin "$WORK/fake-core" --singbox-config "$WORK/config/sing-box.json" \
 	--xray-bin "$WORK/fake-core" --xray-config "$WORK/config/xray.json" \
+	--hysteria-bin "$WORK/fake-core" --hysteria-config "$WORK/config/hysteria.json" \
 	--clash-url "http://127.0.0.1:1" --xray-api "127.0.0.1:1" >>"$WORK/agent.log" 2>&1 &
 agent_pid=$!
 for _ in $(seq 1 60); do
