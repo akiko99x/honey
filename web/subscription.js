@@ -151,9 +151,10 @@
     streisand: v2rayUrl && `streisand://import/${v2rayUrl}`,
     clash: clashUrl && `clash://install-config?url=${enc(clashUrl)}`,
     v2raytun: v2rayUrl && `v2raytun://import/${v2rayUrl}`,
-    // Happ's plain deep link keeps the nested subscription URL after
-    // happ://add/; the URL itself must not be percent-encoded.
-    happ: v2rayUrl && `happ://add/${v2rayUrl}`,
+    // Encode the nested URL so the browser hands the complete subscription
+    // address to Happ instead of parsing its query/fragment as part of the
+    // outer custom-scheme URL.
+    happ: v2rayUrl && `happ://add/${enc(v2rayUrl)}`,
   };
   // universal link: the /sub/:token base (UA-tailored server-side). derive it
   // from the v2ray download url by stripping the format suffix.
@@ -236,6 +237,10 @@
     importSection.querySelectorAll("[data-import]").forEach((btn) => {
       const link = deepLinks[btn.dataset.import];
       if (!link) { btn.hidden = true; return; }
+      if (btn.tagName === "A") {
+        btn.setAttribute("href", link);
+        return;
+      }
       btn.addEventListener("click", () => { window.location.href = link; });
     });
   }

@@ -16,8 +16,15 @@ if [[ "$requested" == "latest" ]]; then
 	endpoint="https://api.github.com/repos/$repo/releases/latest"
 else
 	tag="$requested"
-	[[ "$tag" == v* ]] || tag="v$tag"
-	endpoint="https://api.github.com/repos/$repo/releases/tags/$tag"
+	[[ "$tag" == v* || "$tag" == */v* ]] || tag="v$tag"
+	encoded_tag="$(python3 - "$tag" <<'PY'
+import sys
+import urllib.parse
+
+print(urllib.parse.quote(sys.argv[1], safe=""))
+PY
+)"
+	endpoint="https://api.github.com/repos/$repo/releases/tags/$encoded_tag"
 fi
 
 tmp="$(mktemp -d)"

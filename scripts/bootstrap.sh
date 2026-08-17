@@ -150,8 +150,15 @@ download_verified_github_asset() {
 		endpoint="https://api.github.com/repos/$gh_repo/releases/latest"
 	else
 		tag="$requested"
-		[[ "$tag" == v* ]] || tag="v$tag"
-		endpoint="https://api.github.com/repos/$gh_repo/releases/tags/$tag"
+		[[ "$tag" == v* || "$tag" == */v* ]] || tag="v$tag"
+		encoded_tag="$(python3 - "$tag" <<'PY'
+import sys
+import urllib.parse
+
+print(urllib.parse.quote(sys.argv[1], safe=""))
+PY
+)"
+		endpoint="https://api.github.com/repos/$gh_repo/releases/tags/$encoded_tag"
 	fi
 	json_file="$work/$(echo "$gh_repo" | tr '/' '-')-release.json"
 	curl -fsSL --retry 3 -H 'Accept: application/vnd.github+json' \
@@ -227,7 +234,7 @@ if ((install_local_node)); then
 
 	hysteria_binary="$(
 		download_verified_github_asset \
-			apernet/hysteria "${HONEY_HYSTERIA_VERSION:-latest}" \
+			apernet/hysteria "${HONEY_HYSTERIA_VERSION:-app/v2.12.1}" \
 			'hysteria-linux-amd64' "$work/hysteria"
 	)"
 	install -o root -g root -m 0755 "$hysteria_binary" /usr/local/bin/hysteria

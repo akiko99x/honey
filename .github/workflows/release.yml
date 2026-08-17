@@ -30,6 +30,7 @@ jobs:
           (cd agent && go test ./...)
           (cd master && cargo fmt -- --check && cargo test --locked)
           node --check web/app.js
+          node --check web/subscription.js
           bash -n scripts/*.sh
           bash -n deploy/docker/*.sh
       - name: Build Linux binaries

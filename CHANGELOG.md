@@ -5,6 +5,15 @@ version tags and is currently pre-stable.
 
 ## [Unreleased]
 
+## [0.1.2] - 2026-08-18
+
+### Fixed
+
+- Happ one-tap imports now use a native, percent-encoded deep link to preserve
+  the complete `/v2ray` subscription URL across browsers and operating systems.
+- Docker and bootstrap installations now use Hysteria 2.12.1, which restores
+  clients promptly after stale QUIC sessions caused by sleep or network changes.
+
 ## [0.1.1] - 2026-07-29
 
 ### Added

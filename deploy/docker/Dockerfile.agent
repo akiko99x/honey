@@ -12,7 +12,7 @@ RUN cd agent \
 FROM debian:bookworm-slim AS cores
 ARG SINGBOX_VERSION=v1.13.14
 ARG XRAY_VERSION=v26.3.27
-ARG HYSTERIA_VERSION=latest
+ARG HYSTERIA_VERSION=app/v2.12.1
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
        bash ca-certificates curl python3 tar unzip coreutils \

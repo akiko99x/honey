@@ -209,4 +209,10 @@ mod tests {
         assert_eq!(escape("<x>&\""), "&lt;x&gt;&amp;&quot;");
         assert!(qr_svg("vless://example").unwrap().contains("<svg"));
     }
+
+    #[test]
+    fn happ_import_is_a_native_encoded_deep_link() {
+        assert!(TEMPLATE.contains("<a class=\"import\" data-import=\"happ\">"));
+        assert!(JS.contains("happ://add/${enc(v2rayUrl)}"));
+    }
 }
