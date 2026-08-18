@@ -1,92 +1,59 @@
 <!doctype html>
-<html lang="en" data-theme="dark">
+<html lang="ru" data-theme="dark" data-subscription-base="{{SUBSCRIPTION_BASE_URL}}" data-update-hours="{{UPDATE_INTERVAL_HOURS}}">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="robots" content="noindex,nofollow,noarchive">
-  <title>{{TITLE}} · honey</title>
+  <title>{{TITLE}} · Neko VPN</title>
   <link rel="stylesheet" href="/sub-assets/subscription.css">
 </head>
 <body>
+  <div class="ambient ambient-a" aria-hidden="true"></div><div class="ambient ambient-b" aria-hidden="true"></div>
   <header class="topbar">
-    <a class="brand" href="#" aria-label="honey home"><span class="mark">h</span><b>honey</b></a>
-    <div class="top-actions"><span class="live-dot"></span><span data-i18n="subscription is live">subscription is live</span><select class="lang-select" id="lang-select" aria-label="Language"><option value="en">EN</option><option value="ru">RU</option></select><button id="theme" class="plain" data-i18n="theme">theme</button></div>
+    <a class="brand" href="#connect" aria-label="Neko VPN"><span class="mark" aria-hidden="true"><svg viewBox="0 0 32 32"><path d="M8.2 13.2 6.4 5.7l7 3.8a13 13 0 0 1 5.3 0l7-3.8-1.9 7.6a10.4 10.4 0 1 1-15.6-.1Z"/><path d="M11.3 18.2h.1m9.2 0h.1M13.2 22c1.9 1.4 3.7 1.4 5.6 0"/></svg></span><span class="wordmark"><b>Neko</b><small>VPN</small></span></a>
+    <div class="top-actions"><span class="live"><i></i><span data-i18n="protected">защищено</span></span><select class="lang-select" id="lang-select" aria-label="Язык"><option value="ru">RU</option><option value="en">EN</option></select><button id="theme" class="icon-button" type="button" aria-label="Сменить тему"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a9 9 0 1 0 9 9c-5 2-11-4-9-9Z"/></svg></button></div>
   </header>
+
   <main>
-    <section class="hero">
-      <div><span class="eyebrow" data-i18n="your honey">your honey</span><h1>{{USERNAME}}</h1><p data-i18n="Everything you need to connect. Keep this page private — its address is your access key.">Everything you need to connect. Keep this page private — its address is your access key.</p></div>
-      <div class="status {{STATUS_CLASS}}"><span></span>{{STATUS}}</div>
+    <section class="account glass">
+      <div class="account-copy"><span class="kicker" data-i18n="private access">личный доступ</span><h1>{{USERNAME}}</h1><p data-i18n="Ready on all your devices">Готово для всех ваших устройств</p></div>
+      <div class="status {{STATUS_CLASS}}"><span></span><span data-status>{{STATUS}}</span></div>
+      <div class="metrics" aria-label="Данные подписки">{{METRICS}}</div>
+      <div class="usage"><div class="usage-head"><span data-i18n="Traffic">Трафик</span><b>{{TRAFFIC_TEXT}}</b></div><div class="progress" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="{{TRAFFIC_PERCENT}}"><i style="width:{{TRAFFIC_PERCENT}}%"></i></div><div class="usage-foot"><span><span data-i18n="used">использовано</span> {{TRAFFIC_USED}}</span><span>{{TRAFFIC_REMAINING}}</span></div></div>
     </section>
 
-    <section class="metrics" aria-label="Subscription details">
-      {{METRICS}}
+    <section class="installer" id="connect">
+      <div class="section-head"><div><span class="step">01</span><div><span class="kicker" data-i18n="choose device">выберите устройство</span><h2 data-i18n="Connect Neko VPN">Подключить Neko VPN</h2></div></div><span class="refresh-note"><i></i><span id="refresh-copy">обновление каждый час</span></span></div>
+      <div class="device-tabs" role="tablist" aria-label="Устройство"><button type="button" data-platform="ios" role="tab">iPhone</button><button type="button" data-platform="android" role="tab">Android</button><button type="button" data-platform="windows" role="tab">Windows</button><button type="button" data-platform="macos" role="tab">macOS</button><button type="button" data-platform="linux" role="tab">Linux</button><button type="button" data-platform="tv" role="tab">TV</button></div>
+      <div class="app-step"><div class="step-caption"><span class="step">02</span><span data-i18n="choose app">выберите приложение</span></div><div class="import-grid" id="imports">
+        <a class="import" data-import="happ" data-platforms="ios android windows macos linux tv"><span class="app-icon happ">H</span><span><b>Happ</b><small data-i18n="recommended">рекомендуем</small></span><i>↗</i></a>
+        <button class="import" data-import="v2rayng" data-platforms="android"><span class="app-icon">V</span><span><b>v2rayNG</b><small>Android</small></span><i>↗</i></button>
+        <button class="import" data-copy-app="generic" data-platforms="android windows linux"><span class="app-icon neko">N</span><span><b>NekoBox</b><small data-i18n="copy link">копировать ссылку</small></span><i>＋</i></button>
+        <button class="import" data-import="hiddify" data-platforms="android windows macos linux"><span class="app-icon">Hi</span><span><b>Hiddify</b><small data-i18n="all platforms">все платформы</small></span><i>↗</i></button>
+        <button class="import" data-import="streisand" data-platforms="ios macos"><span class="app-icon">S</span><span><b>Streisand</b><small>iOS · macOS</small></span><i>↗</i></button>
+        <button class="import" data-import="karing" data-platforms="ios android windows macos linux"><span class="app-icon">K</span><span><b>Karing</b><small data-i18n="all platforms">все платформы</small></span><i>↗</i></button>
+        <button class="import" data-import="clash" data-platforms="android windows macos linux"><span class="app-icon">C</span><span><b>Clash / Mihomo</b><small>FlClash · Verge</small></span><i>↗</i></button>
+        <button class="import" data-import="v2raytun" data-platforms="ios android"><span class="app-icon">VT</span><span><b>v2RayTun</b><small>iOS · Android</small></span><i>↗</i></button>
+      </div></div>
     </section>
 
-    <section class="usage card">
-      <div class="section-head"><div><span class="eyebrow" data-i18n="usage">usage</span><h2 data-i18n="Traffic">Traffic</h2></div><b>{{TRAFFIC_TEXT}}</b></div>
-      <div class="progress" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="{{TRAFFIC_PERCENT}}"><i style="width:{{TRAFFIC_PERCENT}}%"></i></div>
-      <div class="usage-foot"><span><span data-i18n="used">used</span> {{TRAFFIC_USED}}</span><span>{{TRAFFIC_REMAINING}}</span></div>
-    </section>
+    <section class="link-card glass"><div class="link-copy"><span class="kicker" data-i18n="your subscription">ваша подписка</span><h2 data-i18n="One link for every device">Одна ссылка для всех устройств</h2><p data-i18n="Keep it private. Anyone with this link can use your VPN.">Не публикуйте её: тот, у кого есть ссылка, сможет пользоваться вашим VPN.</p><div class="uni-link"><code id="uni-url">…</code><button id="uni-copy" data-copy="" type="button"><span data-i18n="copy">копировать</span></button></div><div class="delivery-note" id="delivery-note" hidden><i></i><span data-i18n="Imports use the reserve delivery server">Импорт идёт через резервный сервер выдачи</span></div></div><img class="uni-qr" src="{{QR_URL}}" alt="QR-код подписки" width="168" height="168" loading="lazy"></section>
 
-    <section class="universal card">
-      <div class="section-head"><div><span class="eyebrow" data-i18n="one link">one link</span><h2 data-i18n="Universal link">Universal link</h2></div><span class="muted" data-i18n="auto-detects supported apps">auto-detects supported apps</span></div>
-      <div class="uni-body">
-        <img class="uni-qr" src="{{QR_URL}}" alt="Subscription QR" width="150" height="150" loading="lazy">
-        <div class="uni-copy">
-          <p data-i18n="Paste this link into a supported client to receive a tailored config. If auto-detection fails, use a format below.">Paste this link into a supported client to receive a tailored config. If auto-detection fails, use a format below.</p>
-          <div class="uni-link"><code id="uni-url">…</code><button id="uni-copy" data-copy="" data-i18n="copy">copy</button></div>
-        </div>
-      </div>
-    </section>
+    <details class="manual glass"><summary><span><span class="kicker" data-i18n="advanced">дополнительно</span><b data-i18n="Manual setup and formats">Ручная настройка и форматы</b></span><i>＋</i></summary><div class="manual-body"><div class="download-grid">
+      <a class="download primary" id="dl-v2ray" data-delivery href="{{V2RAY_URL}}"><span><b data-i18n="Universal link">Универсальная ссылка</b><small>v2rayN · NekoBox · Streisand</small></span><i data-i18n="download">скачать</i></a>
+      <a class="download" id="dl-singbox" data-delivery href="{{SINGBOX_URL}}" download="neko-sing-box.json"><span><b>sing-box JSON</b><small data-i18n="auto-select group">автовыбор сервера</small></span><i data-i18n="download">скачать</i></a>
+      <a class="download" data-delivery href="{{SINGBOX_TUN_URL}}" download="neko-sing-box-tun.json"><span><b>sing-box TUN</b><small data-i18n="system-wide VPN preset">системный VPN</small></span><i data-i18n="download">скачать</i></a>
+      <a class="download" id="dl-clash" data-delivery href="{{CLASH_URL}}" download="neko-clash.yaml"><span><b>Clash / Mihomo</b><small data-i18n="auto-select group">автовыбор сервера</small></span><i data-i18n="download">скачать</i></a>
+      <a class="download" data-delivery href="{{LINKS_URL}}" download="neko-links.txt"><span><b data-i18n="Raw links">Сырые ссылки</b><small data-i18n="one URI per endpoint">по одной на сервер</small></span><i data-i18n="download">скачать</i></a>
+    </div></div></details>
 
-    <section class="downloads">
-      <div class="section-head"><div><span class="eyebrow" data-i18n="one tap">one tap</span><h2 data-i18n="Get config">Get config</h2></div><span class="muted" data-i18n="updates every 12 hours">updates every 12 hours</span></div>
-      <div class="download-grid">
-        <a class="download primary" id="dl-v2ray" href="{{V2RAY_URL}}"><span><b data-i18n="Universal link">Universal link</b><small>v2rayN · NekoBox · Streisand</small></span><i data-i18n="download">download</i></a>
-        <a class="download" id="dl-singbox" href="{{SINGBOX_URL}}" download="honey-sing-box.json"><span><b>sing-box JSON</b><small data-i18n="auto-select group">auto-select group</small></span><i data-i18n="download">download</i></a>
-        <a class="download" href="{{SINGBOX_TUN_URL}}" download="honey-sing-box-tun.json"><span><b>sing-box TUN</b><small data-i18n="system-wide VPN preset">system-wide VPN preset</small></span><i data-i18n="download">download</i></a>
-        <a class="download" id="dl-clash" href="{{CLASH_URL}}" download="honey-clash.yaml"><span><b>Clash / Mihomo</b><small data-i18n="with auto-select group">with auto-select group</small></span><i data-i18n="download">download</i></a>
-        <a class="download" href="{{LINKS_URL}}" download="honey-links.txt"><span><b data-i18n="Raw links">Raw links</b><small data-i18n="one URI per endpoint">one URI per endpoint</small></span><i data-i18n="download">download</i></a>
-      </div>
-    </section>
-
-    <section class="imports" id="imports" hidden>
-      <div class="section-head"><div><span class="eyebrow" data-i18n="one click">one click</span><h2 data-i18n="Open in app">Open in app</h2></div><span class="muted" data-i18n="installs this subscription directly">installs this subscription directly</span></div>
-      <div class="import-grid">
-        <button class="import" data-import="v2rayng"><b>v2rayNG</b><small>Android</small></button>
-        <button class="import" data-import="hiddify"><b>Hiddify</b><small data-i18n="all platforms">all platforms</small></button>
-        <button class="import" data-import="singbox"><b>sing-box</b><small>SFA / SFI</small></button>
-        <button class="import" data-import="karing"><b>Karing</b><small>sing-box JSON</small></button>
-        <button class="import" data-import="streisand"><b>Streisand</b><small>iOS</small></button>
-        <button class="import" data-import="clash"><b>Clash / Mihomo</b><small>Verge · FlClash</small></button>
-        <button class="import" data-import="v2raytun"><b>v2RayTun</b><small>iOS · Android</small></button>
-        <a class="import" data-import="happ"><b>Happ</b><small>iOS · Android · Desktop</small></a>
-      </div>
-    </section>
-
-    <section class="usage card speedtest" id="speedtest" hidden>
-      <div class="section-head"><div><span class="eyebrow" data-i18n="check your line">check your line</span><h2 data-i18n="Speed test">Speed test</h2></div><button id="speedtest-run" class="plain" data-i18n="run">run</button></div>
-      <div class="usage-foot"><span id="speedtest-result" data-i18n="measures your connection to this panel (not to a node)">measures your connection to this panel (not to a node)</span></div>
-    </section>
-
-    <section class="downloads services" id="services" hidden>
-      <div class="section-head"><div><span class="eyebrow" data-i18n="also available">also available</span><h2 data-i18n="Extra services">Extra services</h2></div><span class="muted" data-i18n="MTProto / NaiveProxy links">MTProto / NaiveProxy links</span></div>
-      <div class="endpoint-list" id="svc-list"></div>
-    </section>
-
-    <section class="downloads wireguard" id="wireguard" hidden>
-      <div class="section-head"><div><span class="eyebrow" data-i18n="also available">also available</span><h2 data-i18n="WireGuard">WireGuard</h2></div><span class="muted" data-i18n="import into the WireGuard or Amnezia app">import into the WireGuard or Amnezia app</span></div>
-      <div class="download-grid" id="wg-grid"></div>
-    </section>
-
-    <section class="endpoints">
-      <div class="section-head"><div><span class="eyebrow" data-i18n="available now">available now</span><h2 data-i18n="Endpoints">Endpoints</h2></div><span class="count">{{ENDPOINT_COUNT}} <span data-i18n="total">total</span></span></div>
-      <div class="endpoint-list">{{ENDPOINTS}}</div>
-    </section>
-
-    <footer><span data-i18n="honey / private access">honey / private access</span><span data-i18n="if it stops working, ask whoever gave it to you">if it stops working, ask whoever gave it to you</span></footer>
+    <section class="extras" id="services" hidden><div class="section-head compact"><div><span class="kicker" data-i18n="extra services">доп. сервисы</span><h2 data-i18n="Extra services">Дополнительные сервисы</h2></div></div><div class="endpoint-list" id="svc-list"></div></section>
+    <section class="extras" id="wireguard" hidden><div class="section-head compact"><div><span class="kicker">WireGuard</span><h2 data-i18n="Alternative connection">Альтернативное подключение</h2></div></div><div class="download-grid" id="wg-grid"></div></section>
+    <details class="servers glass"><summary><span><span class="kicker" data-i18n="available now">доступно сейчас</span><b><span data-i18n="Servers">Серверы</span> · {{ENDPOINT_COUNT}}</b></span><i>＋</i></summary><div class="endpoint-list">{{ENDPOINTS}}</div></details>
+    <section class="speedtest glass" id="speedtest" hidden><div><span class="kicker" data-i18n="connection check">проверка соединения</span><b id="speedtest-result" data-i18n="Measures the route to the subscription server">Измеряет маршрут до сервера подписки</b></div><button id="speedtest-run" type="button" data-i18n="run test">запустить</button></section>
+    <footer><span>Neko VPN</span><span data-i18n="Need help? Contact support.">Нужна помощь? Напишите в поддержку.</span></footer>
   </main>
-  <div class="toast" id="toast" role="status" data-i18n="copied">copied</div>
+  <div class="toast" id="toast" role="status" aria-live="polite"><span data-i18n="copied">скопировано</span></div>
   <script src="/sub-assets/subscription.js" defer></script>
 </body>
 </html>

@@ -3716,11 +3716,33 @@ async fn subscription_guard_config(pool: &PgPool) -> crate::ratelimit::Subscript
 
 fn default_client_profiles() -> JsonValue {
     json!({
-        "happ-android": {"xhttp_mode": "packet-up", "fingerprint": "qq"},
-        "happ-desktop": {"xhttp_mode": "auto", "fingerprint": "qq"},
-        "karing": {"xhttp_mode": "auto", "fingerprint": "qq"},
-        "generic": {"xhttp_mode": "auto", "fingerprint": "qq"}
+        "happ-android": {"xhttp_mode": "packet-up", "fingerprint": "chrome"},
+        "happ-desktop": {"xhttp_mode": "packet-up", "fingerprint": "chrome"},
+        "karing": {"xhttp_mode": "packet-up", "fingerprint": "chrome"},
+        "generic": {"xhttp_mode": "packet-up", "fingerprint": "chrome"}
     })
+}
+
+fn normalize_subscription_base_url(value: &str) -> Result<String, ApiError> {
+    let value = value.trim();
+    if value.is_empty() {
+        return Ok(String::new());
+    }
+    let parsed = url::Url::parse(value)
+        .map_err(|_| ApiError::bad_request("subscription fallback URL is invalid"))?;
+    if parsed.scheme() != "https"
+        || parsed.host_str().is_none()
+        || !parsed.username().is_empty()
+        || parsed.password().is_some()
+        || parsed.query().is_some()
+        || parsed.fragment().is_some()
+        || !matches!(parsed.path(), "" | "/")
+    {
+        return Err(ApiError::bad_request(
+            "subscription fallback URL must be an HTTPS origin without a path",
+        ));
+    }
+    Ok(value.trim_end_matches('/').to_string())
 }
 
 fn validate_client_profiles(value: &JsonValue) -> Result<(), ApiError> {
@@ -3779,6 +3801,7 @@ struct SettingsView {
     default_subscription_group: String,
     subscription_traffic_policy: String,
     profile_update_interval_hours: i64,
+    subscription_fallback_base_url: String,
     subscription_client_profiles: JsonValue,
     subscription_support_url: String,
     subscription_guard_enabled: bool,
@@ -3846,7 +3869,11 @@ async fn get_settings(State(st): State<AppState>) -> Result<Json<SettingsView>, 
             .filter(|v| matches!(v.as_str(), "auto" | "always" | "never"))
             .cloned()
             .unwrap_or_else(|| "auto".to_string()),
-        profile_update_interval_hours: int("profile_update_interval_hours", 12).clamp(1, 168),
+        profile_update_interval_hours: int("profile_update_interval_hours", 1).clamp(1, 168),
+        subscription_fallback_base_url: map
+            .get("subscription_fallback_base_url")
+            .cloned()
+            .unwrap_or_default(),
         subscription_client_profiles: map
             .get("subscription_client_profiles")
             .and_then(|value| serde_json::from_str(value).ok())
@@ -3907,6 +3934,8 @@ struct UpdateSettings {
     subscription_traffic_policy: Option<String>,
     #[serde(default)]
     profile_update_interval_hours: Option<i64>,
+    #[serde(default)]
+    subscription_fallback_base_url: Option<String>,
     #[serde(default)]
     subscription_client_profiles: Option<JsonValue>,
     #[serde(default)]
@@ -4007,6 +4036,10 @@ async fn update_settings(
             &v.clamp(1, 168).to_string(),
         )
         .await?;
+    }
+    if let Some(v) = input.subscription_fallback_base_url {
+        let value = normalize_subscription_base_url(&v)?;
+        repo::set_setting(&st.pool, "subscription_fallback_base_url", &value).await?;
     }
     if let Some(v) = input.subscription_client_profiles {
         validate_client_profiles(&v)?;
@@ -6588,7 +6621,7 @@ async fn subscription_preview(
     let interval = settings
         .get("profile_update_interval_hours")
         .and_then(|value| value.parse::<i64>().ok())
-        .unwrap_or(12)
+        .unwrap_or(1)
         .clamp(1, 168);
     Ok(Json(json!({
         "client": client,
@@ -6663,12 +6696,18 @@ async fn subscription_document(
 ) -> Result<Response, ApiError> {
     // a known VPN client fetching /sub/:token gets its tailored config directly —
     // one URL works in every app. browsers fall through to the dashboard / JSON.
-    if let Some(fmt) = headers
+    let user_agent = headers
         .get(header::USER_AGENT)
-        .and_then(|value| value.to_str().ok())
-        .and_then(format_for_ua)
-    {
-        let (user, endpoints) = load_subscription(&st, token).await?;
+        .and_then(|value| value.to_str().ok());
+    if let Some(fmt) = user_agent.and_then(format_for_ua) {
+        let (user, raw_endpoints) = load_subscription(&st, token).await?;
+        let settings: std::collections::HashMap<String, String> =
+            repo::all_settings(&st.pool).await?.into_iter().collect();
+        let client = user_agent
+            .and_then(client_profile_for_ua)
+            .unwrap_or("generic");
+        let (mode, fingerprint) = client_profile_overrides(&settings, client)?;
+        let endpoints = apply_client_profile(&raw_endpoints, &mode, &fingerprint);
         return tailored_response(&st, fmt, &user, &endpoints).await;
     }
     let wants_json = headers
@@ -6682,8 +6721,18 @@ async fn subscription_document(
     };
     let links = subscription::endpoint_links(&user, &endpoints);
     if !wants_json {
+        let settings: std::collections::HashMap<String, String> =
+            repo::all_settings(&st.pool).await?.into_iter().collect();
+        let fallback = settings
+            .get("subscription_fallback_base_url")
+            .map(String::as_str)
+            .filter(|value| !value.trim().is_empty());
+        let interval = settings
+            .get("profile_update_interval_hours")
+            .and_then(|value| value.parse::<i64>().ok())
+            .unwrap_or(1);
         return Ok(crate::subscription_page::html_response(
-            crate::subscription_page::render(&user, token, &links),
+            crate::subscription_page::render(&user, token, &links, fallback, interval),
         ));
     }
     let profile = repo::routing_profile_for_user(&st.pool, user.id).await?;
@@ -6705,7 +6754,11 @@ async fn subscription_links(
     State(st): State<AppState>,
     Path(token): Path<Uuid>,
 ) -> Result<impl IntoResponse, ApiError> {
-    let (user, endpoints) = load_subscription(&st, token).await?;
+    let (user, raw_endpoints) = load_subscription(&st, token).await?;
+    let settings: std::collections::HashMap<String, String> =
+        repo::all_settings(&st.pool).await?.into_iter().collect();
+    let (mode, fingerprint) = client_profile_overrides(&settings, "generic")?;
+    let endpoints = apply_client_profile(&raw_endpoints, &mode, &fingerprint);
     let text = subscription::endpoint_links(&user, &endpoints)
         .into_iter()
         .filter_map(|link| link.uri)
@@ -6720,7 +6773,11 @@ async fn subscription_v2ray(
     State(st): State<AppState>,
     Path(token): Path<Uuid>,
 ) -> Result<impl IntoResponse, ApiError> {
-    let (user, endpoints) = load_subscription(&st, token).await?;
+    let (user, raw_endpoints) = load_subscription(&st, token).await?;
+    let settings: std::collections::HashMap<String, String> =
+        repo::all_settings(&st.pool).await?.into_iter().collect();
+    let (mode, fingerprint) = client_profile_overrides(&settings, "generic")?;
+    let endpoints = apply_client_profile(&raw_endpoints, &mode, &fingerprint);
     let body = subscription::v2ray_document(&user, &endpoints);
     Ok((subscription_headers(&st, &user).await?, body))
 }
@@ -6961,7 +7018,7 @@ async fn subscription_headers(st: &AppState, user: &User) -> Result<HeaderMap, A
     let interval = settings
         .get("profile_update_interval_hours")
         .and_then(|value| value.parse::<i64>().ok())
-        .unwrap_or(12);
+        .unwrap_or(1);
     Ok(sub_headers(user, support, interval))
 }
 
@@ -7059,12 +7116,12 @@ fn client_profile_overrides(
         profile
             .get("xhttp_mode")
             .and_then(JsonValue::as_str)
-            .unwrap_or("auto")
+            .unwrap_or("packet-up")
             .to_string(),
         profile
             .get("fingerprint")
             .and_then(JsonValue::as_str)
-            .unwrap_or("qq")
+            .unwrap_or("chrome")
             .to_string(),
     ))
 }
@@ -7134,6 +7191,21 @@ fn format_for_ua(ua: &str) -> Option<SubFormat> {
     None
 }
 
+fn client_profile_for_ua(ua: &str) -> Option<&'static str> {
+    let ua = ua.to_ascii_lowercase();
+    if ua.contains("happ") {
+        return Some(if ua.contains("android") {
+            "happ-android"
+        } else {
+            "happ-desktop"
+        });
+    }
+    if ua.contains("karing") {
+        return Some("karing");
+    }
+    format_for_ua(&ua).map(|_| "generic")
+}
+
 /// Render a user's subscription in the requested format, carrying the standard
 /// `Subscription-Userinfo` / update-interval headers.
 async fn tailored_response(
@@ -7195,8 +7267,13 @@ async fn subscription_by_alias(
         if let Some(reason) = user.suppressed_reason() {
             return Err(ApiError::gone(format!("subscription is {reason}")));
         }
-        let endpoints =
+        let raw_endpoints =
             subscription::expand_endpoints(repo::subscription_endpoints(&st.pool, user.id).await?);
+        let settings: std::collections::HashMap<String, String> =
+            repo::all_settings(&st.pool).await?.into_iter().collect();
+        let client = ua.and_then(client_profile_for_ua).unwrap_or("generic");
+        let (mode, fingerprint) = client_profile_overrides(&settings, client)?;
+        let endpoints = apply_client_profile(&raw_endpoints, &mode, &fingerprint);
         return tailored_response(&st, fmt, &user, &endpoints).await;
     }
     // A browser uses the permanent UUID link; it never requires token
@@ -7226,7 +7303,15 @@ async fn subscription_qr_all(
         Some(alias) => format!("/s/{alias}"),
         None => format!("/sub/{token}"),
     };
-    let svg = crate::subscription_page::qr_svg(&format!("{scheme}://{host}{path}"))?;
+    let settings: std::collections::HashMap<String, String> =
+        repo::all_settings(&st.pool).await?.into_iter().collect();
+    let origin = settings
+        .get("subscription_fallback_base_url")
+        .map(|value| value.trim().trim_end_matches('/'))
+        .filter(|value| !value.is_empty())
+        .map(str::to_string)
+        .unwrap_or_else(|| format!("{scheme}://{host}"));
+    let svg = crate::subscription_page::qr_svg(&format!("{origin}{path}"))?;
     let mut response = svg.into_response();
     response.headers_mut().insert(
         header::CONTENT_TYPE,
@@ -8332,6 +8417,18 @@ mod tests {
         let mut invalid = profiles;
         invalid["happ-android"]["xhttp_mode"] = json!("invalid");
         assert!(validate_client_profiles(&invalid).is_err());
+    }
+
+    #[test]
+    fn validates_subscription_fallback_origin() {
+        assert_eq!(
+            normalize_subscription_base_url("https://sub-fi.example.com/")
+                .ok()
+                .as_deref(),
+            Some("https://sub-fi.example.com")
+        );
+        assert!(normalize_subscription_base_url("http://sub-fi.example.com").is_err());
+        assert!(normalize_subscription_base_url("https://sub-fi.example.com/path").is_err());
     }
 
     #[test]

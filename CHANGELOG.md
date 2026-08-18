@@ -5,6 +5,29 @@ version tags and is currently pre-stable.
 
 ## [Unreleased]
 
+## [0.1.3] - 2026-08-18
+
+### Added
+
+- Public subscriptions now support an operator-configured HTTPS fallback
+  origin, allowing imports and QR codes to be delivered through a reserve
+  server while the master remains the source of truth.
+- The public page has a new mobile-first Neko VPN installer with device and app
+  selection, compact account details, and an accessible liquid-glass design.
+
+### Changed
+
+- The default subscription refresh interval is now one hour and remains
+  editable globally from runtime settings.
+- XHTTP client profiles default to the widely supported `packet-up` mode and
+  `chrome` uTLS fingerprint.
+
+### Fixed
+
+- Canonical `/v2ray`, raw-link, alias, and User-Agent-tailored subscriptions now
+  apply their client compatibility profile instead of leaking the inbound's
+  older `auto`/`qq` values to clients.
+
 ## [0.1.2] - 2026-08-18
 
 ### Fixed

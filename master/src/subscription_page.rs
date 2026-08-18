@@ -46,7 +46,13 @@ fn text_asset(content_type: &'static str, body: &'static str, cache: &'static st
     response
 }
 
-pub fn render(user: &User, token: Uuid, links: &[EndpointLink]) -> String {
+pub fn render(
+    user: &User,
+    token: Uuid,
+    links: &[EndpointLink],
+    fallback_base_url: Option<&str>,
+    update_interval_hours: i64,
+) -> String {
     let status = user.suppressed_reason().unwrap_or("active");
     let status_class = if status == "active" { "on" } else { "off" };
     let total = user.traffic_limit_bytes.max(0);
@@ -89,6 +95,14 @@ pub fn render(user: &User, token: Uuid, links: &[EndpointLink]) -> String {
     let base = format!("/sub/{token}");
 
     TEMPLATE
+        .replace(
+            "{{SUBSCRIPTION_BASE_URL}}",
+            &escape(fallback_base_url.unwrap_or_default()),
+        )
+        .replace(
+            "{{UPDATE_INTERVAL_HOURS}}",
+            &update_interval_hours.clamp(1, 168).to_string(),
+        )
         .replace(
             "{{TITLE}}",
             &escape(crate::subscription::profile_title(user)),
@@ -212,7 +226,8 @@ mod tests {
 
     #[test]
     fn happ_import_is_a_native_encoded_deep_link() {
-        assert!(TEMPLATE.contains("<a class=\"import\" data-import=\"happ\">"));
-        assert!(JS.contains("happ://add/${enc(v2rayUrl)}"));
+        assert!(TEMPLATE.contains("<a class=\"import\" data-import=\"happ\""));
+        assert!(JS.contains("happ://add/${enc(happUrl)}"));
+        assert!(TEMPLATE.contains("data-subscription-base=\"{{SUBSCRIPTION_BASE_URL}}\""));
     }
 }

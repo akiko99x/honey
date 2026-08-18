@@ -3483,7 +3483,8 @@
         <div class="form-row"><label><span>Global subscription title</span><input id="set-sub-title" maxlength="25" value="${esc(s.default_subscription_title || "")}" placeholder="VPN Elusion"></label><label><span>Global client group</span><input id="set-sub-group" maxlength="40" value="${esc(s.default_subscription_group || "")}" placeholder="Premium"></label></div>
         <label><span>Global subscription description</span><textarea id="set-sub-description" maxlength="200" rows="3" placeholder="Traffic: {TRAFFIC_SPENT} · left: {DAYS_LEFT}">${esc(s.default_subscription_description || "")}</textarea></label>
         <p class="form-note">Per-user title and description override these defaults. Supported tags: {USERNAME}, {DAYS_ELAPSED}, {TRAFFIC_SPENT}, {DAYS_LEFT}. Happ receives Telegram as a support button.</p>
-        <div class="form-row"><label><span>Telegram / support URL</span><input id="set-sub-support" value="${esc(s.subscription_support_url || "")}" placeholder="https://t.me/example"></label><label><span>Update interval, hours</span><input id="set-sub-interval" type="number" min="1" max="168" value="${Number(s.profile_update_interval_hours || 12)}"></label></div>
+        <div class="form-row"><label><span>Telegram / support URL</span><input id="set-sub-support" value="${esc(s.subscription_support_url || "")}" placeholder="https://t.me/example"></label><label><span>Update interval, hours</span><input id="set-sub-interval" type="number" min="1" max="168" value="${Number(s.profile_update_interval_hours || 1)}"></label></div>
+        <div class="form-row"><label><span>Fallback subscription origin</span><input id="set-sub-fallback" value="${esc(s.subscription_fallback_base_url || "")}" placeholder="https://sub-fi.example.com"></label><span class="form-note">Optional HTTPS origin served through the reserve node. New imports and QR codes use it, while this panel remains the source of truth.</span></div>
         <div class="form-row"><label><span>Traffic row default</span><select id="set-sub-traffic-policy">${["auto","always","never"].map((v) => option(v, v, s.subscription_traffic_policy || "auto")).join("")}</select></label><span class="form-note"><b>auto</b> emits traffic metadata only for users with a finite traffic limit.</span></div>
         <div class="section-label">CLIENT COMPATIBILITY PROFILES</div>
         ${profileRow("happ-android", "Happ Android")}
@@ -3526,6 +3527,7 @@
       default_subscription_group: document.getElementById("set-sub-group").value.trim(),
       subscription_traffic_policy: document.getElementById("set-sub-traffic-policy").value,
       profile_update_interval_hours: Number(document.getElementById("set-sub-interval").value),
+      subscription_fallback_base_url: document.getElementById("set-sub-fallback").value.trim(),
       subscription_client_profiles: Object.fromEntries(["happ-android","happ-desktop","karing","generic"].map((key) => [key, {
         xhttp_mode: document.getElementById(`set-profile-${key}-mode`).value,
         fingerprint: document.getElementById(`set-profile-${key}-fp`).value,

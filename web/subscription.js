@@ -1,268 +1,159 @@
 (() => {
   const root = document.documentElement;
   const toast = document.querySelector("#toast");
-  const saved = localStorage.getItem("honey-sub-theme");
-  if (saved === "light" || saved === "dark") root.dataset.theme = saved;
+  const savedTheme = localStorage.getItem("neko-sub-theme");
+  if (savedTheme === "light" || savedTheme === "dark") root.dataset.theme = savedTheme;
 
-  document.querySelector("#theme")?.addEventListener("click", () => {
-    root.dataset.theme = root.dataset.theme === "light" ? "dark" : "light";
-    localStorage.setItem("honey-sub-theme", root.dataset.theme);
-  });
-
-  // --- i18n (public subscription page): EN default, RU translation. Keyed by the
-  // canonical English string; t() falls back to the key.
   const I18N = {
     ru: {
-      "subscription is live": "подписка активна", "theme": "тема",
-      "your honey": "ваш honey",
-      "Everything you need to connect. Keep this page private — its address is your access key.":
-        "Всё для подключения. Держите эту страницу в секрете — её адрес и есть ваш ключ доступа.",
-      "usage": "трафик", "Traffic": "Трафик", "used": "использовано",
-      "one link": "одна ссылка", "Universal link": "Универсальная ссылка",
-      "auto-detects supported apps": "определяет поддерживаемые приложения",
-      "Paste this link into a supported client to receive a tailored config. If auto-detection fails, use a format below.":
-        "Вставьте ссылку в поддерживаемый клиент. Если автоопределение не сработает, выберите формат ниже.",
-      "copy": "копировать", "copied": "скопировано",
-      "one tap": "в один тап", "Get config": "Получить конфиг",
-      "updates every 12 hours": "обновляется каждые 12 часов",
-      "download": "скачать", "auto-select group": "группа авто-выбора",
-      "system-wide VPN preset": "системный VPN-пресет", "with auto-select group": "с группой авто-выбора",
-      "Raw links": "Сырые ссылки", "one URI per endpoint": "по одному URI на эндпоинт",
-      "one click": "в один клик", "Open in app": "Открыть в приложении",
-      "installs this subscription directly": "устанавливает подписку напрямую",
-      "all platforms": "все платформы",
-      "available now": "доступно сейчас", "Endpoints": "Эндпоинты", "total": "всего",
-      "check your line": "проверь канал", "Speed test": "Спидтест", "run": "запустить",
-      "measures your connection to this panel (not to a node)": "измеряет соединение с этой панелью (не с нодой)",
-      "measuring…": "измеряем…", "to this panel, not to a node": "до этой панели, не до ноды",
-      "speed test failed": "спидтест не удался",
-      "also available": "также доступно", "WireGuard": "WireGuard",
-      "Extra services": "Доп. сервисы", "MTProto / NaiveProxy links": "ссылки MTProto / NaiveProxy",
-      "import into the WireGuard or Amnezia app": "импорт в приложение WireGuard или Amnezia",
-      "honey / private access": "honey / приватный доступ",
-      "if it stops working, ask whoever gave it to you": "если перестало работать — спросите того, кто выдал доступ",
-      "qr": "qr",
-      // server-rendered labels
-      "subscription id": "id подписки", "started": "начало", "expires": "истекает", "access": "доступ",
-      "No accessible endpoints are available yet.": "Пока нет доступных эндпоинтов.",
+      protected: "защищено", "private access": "личный доступ",
+      "Ready on all your devices": "Готово для всех ваших устройств",
+      Traffic: "Трафик", used: "использовано", "choose device": "выберите устройство",
+      "Connect Neko VPN": "Подключить Neko VPN", "choose app": "выберите приложение",
+      recommended: "рекомендуем", "copy link": "копировать ссылку", "all platforms": "все платформы",
+      "your subscription": "ваша подписка", "One link for every device": "Одна ссылка для всех устройств",
+      "Keep it private. Anyone with this link can use your VPN.": "Не публикуйте её: тот, у кого есть ссылка, сможет пользоваться вашим VPN.",
+      copy: "копировать", copied: "скопировано", "Imports use the reserve delivery server": "Импорт идёт через резервный сервер выдачи",
+      advanced: "дополнительно", "Manual setup and formats": "Ручная настройка и форматы",
+      "Universal link": "Универсальная ссылка", download: "скачать", "auto-select group": "автовыбор сервера",
+      "system-wide VPN preset": "системный VPN", "Raw links": "Сырые ссылки", "one URI per endpoint": "по одной на сервер",
+      "extra services": "доп. сервисы", "Extra services": "Дополнительные сервисы", "Alternative connection": "Альтернативное подключение",
+      "available now": "доступно сейчас", Servers: "Серверы", "connection check": "проверка соединения",
+      "Measures the route to the subscription server": "Измеряет маршрут до сервера подписки", "run test": "запустить",
+      "Need help? Contact support.": "Нужна помощь? Напишите в поддержку.",
+      "subscription id": "id подписки", started: "начало", expires: "истекает", access: "доступ",
+      "No accessible endpoints are available yet.": "Пока нет доступных серверов.", qr: "qr",
+      "measuring…": "измеряем…", "speed test failed": "не удалось измерить",
     },
   };
-  let lang = localStorage.getItem("honey-sub-lang");
-  if (lang !== "ru" && lang !== "en") lang = "en";
-  const t = (key) => (lang === "en" ? key : (I18N[lang] && I18N[lang][key]) || key);
+  let lang = localStorage.getItem("neko-sub-lang");
+  if (lang !== "ru" && lang !== "en") lang = navigator.language?.toLowerCase().startsWith("ru") ? "ru" : "en";
+  const t = (key) => (lang === "en" ? key : I18N.ru[key] || key);
+  const updateDynamicCopy = () => {
+    const hours = Math.max(1, Number(root.dataset.updateHours) || 1);
+    const el = document.querySelector("#refresh-copy");
+    if (!el) return;
+    if (lang === "ru") {
+      const form = hours % 10 === 1 && hours % 100 !== 11 ? "час" : hours % 10 >= 2 && hours % 10 <= 4 && !(hours % 100 >= 12 && hours % 100 <= 14) ? "часа" : "часов";
+      el.textContent = `обновление каждые ${hours} ${form}`;
+    } else el.textContent = `updates every ${hours} ${hours === 1 ? "hour" : "hours"}`;
+  };
   const applyI18n = () => {
     document.querySelectorAll("[data-i18n]").forEach((el) => { el.textContent = t(el.dataset.i18n); });
     root.lang = lang;
+    updateDynamicCopy();
   };
   const langSelect = document.querySelector("#lang-select");
   if (langSelect) {
     langSelect.value = lang;
-    langSelect.addEventListener("change", (e) => {
-      lang = e.target.value === "ru" ? "ru" : "en";
-      localStorage.setItem("honey-sub-lang", lang);
-      applyI18n();
-    });
+    langSelect.addEventListener("change", (event) => { lang = event.target.value === "en" ? "en" : "ru"; localStorage.setItem("neko-sub-lang", lang); applyI18n(); });
   }
   applyI18n();
 
-  // white-label branding (public): brand name, accent, welcome, section toggles.
-  fetch("/branding", { headers: { accept: "application/json" } })
-    .then((r) => (r.ok ? r.json() : null))
-    .then((b) => {
-      if (!b) return;
-      if (b.accent_color) document.documentElement.style.setProperty("--accent", b.accent_color);
-      if (b.brand_name) {
-        const el = document.querySelector(".brand b");
-        if (el) el.textContent = b.brand_name;
-        document.title = `${b.brand_name} · subscription`;
-      }
-      if (b.logo_url) {
-        const mark = document.querySelector(".brand .mark");
-        if (mark) {
-          mark.textContent = "";
-          const img = document.createElement("img");
-          img.src = b.logo_url;
-          img.alt = "";
-          img.style.cssText = "width:100%;height:100%;object-fit:contain;border-radius:inherit";
-          mark.append(img);
-        }
-      }
-      const hide = (sel) => { const el = document.querySelector(sel); if (el) el.hidden = true; };
-      if (b.sub_show_imports === false) hide(".imports");
-      if (b.sub_show_downloads === false) hide(".downloads");
-      if (b.sub_show_endpoints === false) hide(".endpoints");
-      if (b.sub_welcome) {
-        const hero = document.querySelector(".hero p");
-        if (hero) hero.textContent = b.sub_welcome;
-      }
-      if (b.footer_text || b.support_url) {
-        const foot = document.querySelector("footer");
-        if (foot) {
-          foot.innerHTML = "";
-          const left = document.createElement("span");
-          left.textContent = b.footer_text || "";
-          foot.append(left);
-          if (b.support_url) {
-            const a = document.createElement("a");
-            a.href = b.support_url;
-            a.target = "_blank";
-            a.rel = "noopener";
-            a.textContent = b.support_text || "support";
-            foot.append(a);
-          }
-        }
-      }
-    })
-    .catch(() => {});
-
-  // operator announcement banner (public, may be null).
-  fetch("/announcement", { headers: { accept: "application/json" } })
-    .then((r) => (r.ok ? r.json() : null))
-    .then((a) => {
-      if (!a || !a.title) return;
-      const main = document.querySelector("main");
-      if (!main) return;
-      const el = document.createElement("div");
-      el.className = `announce ${a.level || "info"}`;
-      const b = document.createElement("b");
-      b.textContent = a.title;
-      el.append(b);
-      if (a.body) { const p = document.createElement("p"); p.textContent = a.body; el.append(p); }
-      main.prepend(el);
-    })
-    .catch(() => {});
-
-  // one-click import: build client deep-links from the rendered download urls.
-  const absUrl = (id) => {
-    const el = document.getElementById(id);
-    if (!el) return "";
-    try { return new URL(el.getAttribute("href"), location.href).href; } catch { return ""; }
-  };
-  const v2rayUrl = absUrl("dl-v2ray");
-  const singboxUrl = absUrl("dl-singbox");
-  const clashUrl = absUrl("dl-clash");
-  const enc = encodeURIComponent;
-  const name = document.title.split(" ")[0] || "honey";
-  const deepLinks = {
-    v2rayng: v2rayUrl && `v2rayng://install-sub?url=${enc(v2rayUrl)}&name=${enc(name)}`,
-    hiddify: v2rayUrl && `hiddify://install-sub?url=${enc(v2rayUrl)}#${enc(name)}`,
-    singbox: singboxUrl && `sing-box://import-remote-profile?url=${enc(singboxUrl)}#${enc(name)}`,
-    karing: singboxUrl && `karing://install-config?url=${enc(singboxUrl)}&name=${enc(name)}`,
-    streisand: v2rayUrl && `streisand://import/${v2rayUrl}`,
-    clash: clashUrl && `clash://install-config?url=${enc(clashUrl)}`,
-    v2raytun: v2rayUrl && `v2raytun://import/${v2rayUrl}`,
-    // Encode the nested URL so the browser hands the complete subscription
-    // address to Happ instead of parsing its query/fragment as part of the
-    // outer custom-scheme URL.
-    happ: v2rayUrl && `happ://add/${enc(v2rayUrl)}`,
-  };
-  // universal link: the /sub/:token base (UA-tailored server-side). derive it
-  // from the v2ray download url by stripping the format suffix.
-  const uniUrl = v2rayUrl ? v2rayUrl.replace(/\/v2ray$/, "") : "";
-  const uniEl = document.getElementById("uni-url");
-  const uniCopy = document.getElementById("uni-copy");
-  if (uniUrl && uniEl) {
-    uniEl.textContent = uniUrl;
-    if (uniCopy) uniCopy.dataset.copy = uniUrl;
-  }
-
-  // client-facing speed test: times a download from the panel. Honest scope —
-  // this measures client <-> panel, not client <-> node.
-  if (uniUrl) {
-    const sec = document.getElementById("speedtest");
-    const btn = document.getElementById("speedtest-run");
-    const out = document.getElementById("speedtest-result");
-    if (sec && btn && out) {
-      sec.hidden = false;
-      btn.addEventListener("click", async () => {
-        btn.disabled = true;
-        out.textContent = t("measuring…");
-        const started = performance.now();
-        try {
-          const resp = await fetch(`${uniUrl}/speedtest?mb=10`, { cache: "no-store" });
-          if (!resp.ok) throw new Error(String(resp.status));
-          const blob = await resp.blob();
-          const secs = (performance.now() - started) / 1000;
-          const mbps = secs > 0 ? (blob.size * 8) / secs / 1e6 : 0;
-          out.textContent = `${mbps.toFixed(1)} Mbps · ${t("to this panel, not to a node")}`;
-        } catch {
-          out.textContent = t("speed test failed");
-        } finally {
-          btn.disabled = false;
-        }
-      });
-    }
-  }
-
-  // managed external services (MTProto / NaiveProxy) — copyable client links.
-  if (uniUrl) {
-    const escH = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
-    fetch(`${uniUrl}/services`, { headers: { accept: "application/json" } })
-      .then((r) => (r.ok ? r.json() : []))
-      .then((list) => {
-        if (!Array.isArray(list) || !list.length) return;
-        const sec = document.getElementById("services");
-        const box = document.getElementById("svc-list");
-        if (!sec || !box) return;
-        box.innerHTML = list.map((s) => `<article class="endpoint"><div class="protocol">${escH(s.kind === "mtproto" ? "TG" : "NV")}</div><div class="endpoint-main"><b>${escH(s.name)}</b><small>${escH(s.kind)}</small></div><div class="endpoint-actions"><button data-copy="${escH(s.link)}" data-i18n="copy">${t("copy")}</button></div></article>`).join("");
-        sec.hidden = false;
-      })
-      .catch(() => {});
-  }
-
-  // WireGuard / AmneziaWG configs (separate data-plane; may be empty).
-  if (uniUrl) {
-    const escHtml = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
-    fetch(`${uniUrl}/wireguard`, { headers: { accept: "application/json" } })
-      .then((r) => (r.ok ? r.json() : []))
-      .then((list) => {
-        if (!Array.isArray(list) || !list.length) return;
-        const sec = document.getElementById("wireguard");
-        const grid = document.getElementById("wg-grid");
-        if (!sec || !grid) return;
-        grid.innerHTML = list.map((w) => {
-          const cfg = `${uniUrl}/wireguard/${encodeURIComponent(w.id)}`;
-          const label = w.amnezia ? "AmneziaWG" : "WireGuard";
-          return `<a class="download" href="${cfg}" download="${escHtml(w.name)}.conf"><span><b>${escHtml(w.name)}</b><small>${label} · .conf</small></span><i>${t("download")}</i></a>`
-            + `<a class="download" href="${cfg}/qr" target="_blank" rel="noopener"><span><b>${escHtml(w.name)} QR</b><small>${label}</small></span><i>QR</i></a>`;
-        }).join("");
-        sec.hidden = false;
-      })
-      .catch(() => {});
-  }
-
-  const importSection = document.getElementById("imports");
-  if (importSection && (v2rayUrl || singboxUrl || clashUrl)) {
-    importSection.hidden = false;
-    importSection.querySelectorAll("[data-import]").forEach((btn) => {
-      const link = deepLinks[btn.dataset.import];
-      if (!link) { btn.hidden = true; return; }
-      if (btn.tagName === "A") {
-        btn.setAttribute("href", link);
-        return;
-      }
-      btn.addEventListener("click", () => { window.location.href = link; });
-    });
-  }
-
-  document.addEventListener("click", async (event) => {
-    const button = event.target.closest("[data-copy]");
-    if (!button) return;
-    try {
-      await navigator.clipboard.writeText(button.dataset.copy);
-      button.textContent = t("copied");
-      toast.classList.add("show");
-      setTimeout(() => {
-        button.textContent = t("copy");
-        toast.classList.remove("show");
-      }, 1500);
-    } catch {
-      const input = document.createElement("textarea");
-      input.value = button.dataset.copy;
-      document.body.append(input);
-      input.select();
-      document.execCommand("copy");
-      input.remove();
-    }
+  document.querySelector("#theme")?.addEventListener("click", () => {
+    root.dataset.theme = root.dataset.theme === "light" ? "dark" : "light";
+    localStorage.setItem("neko-sub-theme", root.dataset.theme);
   });
+
+  const showToast = (message = t("copied")) => {
+    const span = toast?.querySelector("span");
+    if (span) span.textContent = message;
+    toast?.classList.add("show");
+    window.setTimeout(() => toast?.classList.remove("show"), 1500);
+  };
+  const copyText = async (value) => {
+    try { await navigator.clipboard.writeText(value); }
+    catch {
+      const input = document.createElement("textarea"); input.value = value; document.body.append(input); input.select(); document.execCommand("copy"); input.remove();
+    }
+    showToast();
+  };
+
+  const localAbs = (id) => {
+    const href = document.getElementById(id)?.getAttribute("href");
+    try { return href ? new URL(href, location.href).href : ""; } catch { return ""; }
+  };
+  const deliveryBase = root.dataset.subscriptionBase?.trim().replace(/\/$/, "") || "";
+  const throughDelivery = (value) => {
+    if (!value || !deliveryBase) return value;
+    try { const url = new URL(value); return `${deliveryBase}${url.pathname}${url.search}${url.hash}`; } catch { return value; }
+  };
+  const localV2rayUrl = localAbs("dl-v2ray");
+  const localUniUrl = localV2rayUrl ? localV2rayUrl.replace(/\/v2ray$/, "") : "";
+  const v2rayUrl = throughDelivery(localV2rayUrl);
+  const singboxUrl = throughDelivery(localAbs("dl-singbox"));
+  const clashUrl = throughDelivery(localAbs("dl-clash"));
+  const uniUrl = throughDelivery(localUniUrl);
+  document.querySelectorAll("[data-delivery]").forEach((link) => { link.href = throughDelivery(link.href); });
+  const profileUrl = (client) => uniUrl ? `${uniUrl}/profile/${client}` : "";
+  const enc = encodeURIComponent;
+  const profileName = document.title.split(" · ")[0] || "Neko VPN";
+
+  const uniEl = document.querySelector("#uni-url");
+  const uniCopy = document.querySelector("#uni-copy");
+  if (uniUrl && uniEl) { uniEl.textContent = uniUrl; if (uniCopy) uniCopy.dataset.copy = uniUrl; }
+  if (deliveryBase) document.querySelector("#delivery-note")?.removeAttribute("hidden");
+
+  const guessedPlatform = () => {
+    const ua = navigator.userAgent.toLowerCase();
+    if (/iphone|ipad|ipod/.test(ua)) return "ios";
+    if (ua.includes("android")) return /tv|aft/.test(ua) ? "tv" : "android";
+    if (ua.includes("win")) return "windows";
+    if (ua.includes("mac")) return "macos";
+    if (ua.includes("linux")) return "linux";
+    return "android";
+  };
+  let platform = guessedPlatform();
+  const deepLinks = () => {
+    const generic = profileUrl("generic") || v2rayUrl;
+    const happUrl = profileUrl(platform === "android" || platform === "tv" ? "happ-android" : "happ-desktop") || v2rayUrl;
+    return {
+      v2rayng: generic && `v2rayng://install-sub?url=${enc(generic)}&name=${enc(profileName)}`,
+      hiddify: generic && `hiddify://install-sub?url=${enc(generic)}#${enc(profileName)}`,
+      singbox: singboxUrl && `sing-box://import-remote-profile?url=${enc(singboxUrl)}#${enc(profileName)}`,
+      karing: profileUrl("karing") && `karing://install-config?url=${enc(profileUrl("karing"))}&name=${enc(profileName)}`,
+      streisand: generic && `streisand://import/${generic}`,
+      clash: clashUrl && `clash://install-config?url=${enc(clashUrl)}`,
+      v2raytun: generic && `v2raytun://import/${generic}`,
+      happ: happUrl && `happ://add/${enc(happUrl)}`,
+    };
+  };
+  const refreshApps = () => {
+    document.querySelectorAll("[data-platform]").forEach((button) => { const active = button.dataset.platform === platform; button.classList.toggle("active", active); button.setAttribute("aria-selected", String(active)); });
+    document.querySelectorAll("[data-platforms]").forEach((card) => { card.hidden = !card.dataset.platforms.split(/\s+/).includes(platform); });
+    const links = deepLinks();
+    document.querySelectorAll("[data-import]").forEach((card) => {
+      const link = links[card.dataset.import];
+      if (card.tagName === "A") card.setAttribute("href", link || "#");
+    });
+  };
+  document.querySelectorAll("[data-platform]").forEach((button) => button.addEventListener("click", () => { platform = button.dataset.platform; refreshApps(); }));
+  document.querySelectorAll("button[data-import]").forEach((button) => button.addEventListener("click", () => { const link = deepLinks()[button.dataset.import]; if (link) location.href = link; }));
+  document.querySelectorAll("[data-copy-app]").forEach((button) => button.addEventListener("click", () => copyText(profileUrl(button.dataset.copyApp) || v2rayUrl)));
+  refreshApps();
+
+  document.addEventListener("click", (event) => {
+    const button = event.target.closest("[data-copy]");
+    if (button?.dataset.copy) copyText(button.dataset.copy);
+  });
+
+  fetch("/branding", { headers: { accept: "application/json" } }).then((r) => r.ok ? r.json() : null).then((b) => {
+    if (!b) return;
+    if (b.accent_color) root.style.setProperty("--accent", b.accent_color);
+    if (b.brand_name) { const el = document.querySelector(".wordmark b"); if (el) el.textContent = b.brand_name.replace(/\s*vpn$/i, ""); document.title = `${b.brand_name} · subscription`; }
+    if (b.logo_url) { const mark = document.querySelector(".mark"); if (mark) { const image = document.createElement("img"); image.src = b.logo_url; image.alt = ""; mark.replaceChildren(image); } }
+    if (b.sub_welcome) { const hero = document.querySelector(".account-copy p"); if (hero) hero.textContent = b.sub_welcome; }
+    if (b.footer_text || b.support_url) { const foot = document.querySelector("footer"); if (foot) { const label = document.createElement("span"); label.textContent = b.footer_text || "Neko VPN"; foot.replaceChildren(label); if (b.support_url) { const a = document.createElement("a"); a.href = b.support_url; a.target = "_blank"; a.rel = "noopener"; a.textContent = b.support_text || "support"; foot.append(a); } } }
+  }).catch(() => {});
+
+  fetch("/announcement", { headers: { accept: "application/json" } }).then((r) => r.ok ? r.json() : null).then((a) => {
+    if (!a?.title) return; const el = document.createElement("div"); el.className = `announce ${a.level || "info"}`; const title = document.createElement("b"); title.textContent = a.title; el.append(title); if (a.body) { const p = document.createElement("p"); p.textContent = a.body; el.append(p); } document.querySelector("main")?.prepend(el);
+  }).catch(() => {});
+
+  if (localUniUrl) {
+    const speed = document.querySelector("#speedtest"), run = document.querySelector("#speedtest-run"), result = document.querySelector("#speedtest-result");
+    if (speed && run && result) { speed.hidden = false; run.addEventListener("click", async () => { run.disabled = true; result.textContent = t("measuring…"); const started = performance.now(); try { const response = await fetch(`${localUniUrl}/speedtest?mb=10`, { cache: "no-store" }); if (!response.ok) throw new Error(); const blob = await response.blob(); const mbps = (blob.size * 8) / ((performance.now() - started) / 1000) / 1e6; result.textContent = `${mbps.toFixed(1)} Mbps`; } catch { result.textContent = t("speed test failed"); } finally { run.disabled = false; } }); }
+    fetch(`${localUniUrl}/services`, { headers: { accept: "application/json" } }).then((r) => r.ok ? r.json() : []).then((list) => { if (!Array.isArray(list) || !list.length) return; const section = document.querySelector("#services"), box = document.querySelector("#svc-list"); if (!section || !box) return; list.forEach((service) => { const row = document.createElement("article"); row.className = "endpoint"; row.innerHTML = `<div class="protocol">${service.kind === "mtproto" ? "TG" : "NV"}</div><div class="endpoint-main"><b></b><small></small></div><div class="endpoint-actions"><button type="button" data-copy="">${t("copy")}</button></div>`; row.querySelector("b").textContent = service.name; row.querySelector("small").textContent = service.kind; row.querySelector("button").dataset.copy = service.link; box.append(row); }); section.hidden = false; }).catch(() => {});
+    fetch(`${localUniUrl}/wireguard`, { headers: { accept: "application/json" } }).then((r) => r.ok ? r.json() : []).then((list) => { if (!Array.isArray(list) || !list.length) return; const section = document.querySelector("#wireguard"), grid = document.querySelector("#wg-grid"); if (!section || !grid) return; list.forEach((item) => { const link = document.createElement("a"); link.className = "download"; link.href = `${localUniUrl}/wireguard/${encodeURIComponent(item.id)}`; link.download = `${item.name}.conf`; link.innerHTML = `<span><b></b><small>${item.amnezia ? "AmneziaWG" : "WireGuard"} · .conf</small></span><i>${t("download")}</i>`; link.querySelector("b").textContent = item.name; grid.append(link); }); section.hidden = false; }).catch(() => {});
+  }
 })();
