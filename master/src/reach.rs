@@ -9,15 +9,76 @@ use std::time::Duration;
 
 use anyhow::Result;
 use sqlx::PgPool;
-use tokio::net::TcpStream;
+use std::net::{IpAddr, SocketAddr};
+
+use tokio::net::{lookup_host, TcpStream, UdpSocket};
 use uuid::Uuid;
 
 use crate::db::repo;
 
-/// UDP/QUIC protocols can't be cheaply TCP-probed; leave them "unknown" for an
-/// external checker to report.
-fn is_udp(kind: &str) -> bool {
+const QUIC_PROBE_TIMEOUT: Duration = Duration::from_secs(5);
+const QUIC_MIN_INITIAL_SIZE: usize = 1200;
+const QUIC_RESERVED_VERSION: [u8; 4] = [0x0a, 0x0a, 0x0a, 0x0a];
+
+fn is_quic(kind: &str) -> bool {
     matches!(kind, "hysteria2" | "tuic")
+}
+
+/// Build a padded QUIC long-header packet with an unsupported reserved version.
+/// A reachable QUIC endpoint responds with a Version Negotiation packet without
+/// requiring application credentials, which makes this suitable for HY2/TUIC
+/// data-plane health checks.
+fn quic_probe_packet() -> [u8; QUIC_MIN_INITIAL_SIZE] {
+    let mut packet = [0u8; QUIC_MIN_INITIAL_SIZE];
+    packet[0] = 0xc0; // long header + fixed bit
+    packet[1..5].copy_from_slice(&QUIC_RESERVED_VERSION);
+
+    let id = Uuid::new_v4();
+    let id = id.as_bytes();
+    packet[5] = 8; // destination connection ID length
+    packet[6..14].copy_from_slice(&id[..8]);
+    packet[14] = 8; // source connection ID length
+    packet[15..23].copy_from_slice(&id[8..]);
+    packet
+}
+
+fn is_quic_version_negotiation(packet: &[u8]) -> bool {
+    packet.len() >= 5 && packet[0] & 0x80 != 0 && packet[1..5] == [0, 0, 0, 0]
+}
+
+async fn quic_open_addr(addr: SocketAddr) -> bool {
+    let bind_addr = match addr.ip() {
+        IpAddr::V4(_) => "0.0.0.0:0",
+        IpAddr::V6(_) => "[::]:0",
+    };
+    let Ok(socket) = UdpSocket::bind(bind_addr).await else {
+        return false;
+    };
+    if socket.connect(addr).await.is_err() {
+        return false;
+    }
+    if socket.send(&quic_probe_packet()).await.is_err() {
+        return false;
+    }
+
+    let mut response = [0u8; 2048];
+    matches!(
+        tokio::time::timeout(QUIC_PROBE_TIMEOUT, socket.recv(&mut response)).await,
+        Ok(Ok(size)) if is_quic_version_negotiation(&response[..size])
+    )
+}
+
+/// Verify that a UDP/QUIC endpoint responds from at least one resolved address.
+pub async fn quic_open(host: &str, port: u16) -> bool {
+    let Ok(addrs) = lookup_host((host, port)).await else {
+        return false;
+    };
+    for addr in addrs {
+        if quic_open_addr(addr).await {
+            return true;
+        }
+    }
+    false
 }
 
 pub async fn tcp_open(host: &str, port: u16) -> bool {
@@ -72,8 +133,8 @@ pub fn pick_best_cdn(
     }
 }
 
-/// Probe one inbound and store the verdict. Returns the reachable state (or None
-/// if the protocol isn't probeable from here).
+/// Probe one inbound and store the verdict. TCP protocols use a connect probe;
+/// HY2/TUIC use credential-free QUIC version negotiation over UDP.
 pub async fn check_one(
     pool: &PgPool,
     inbound_id: Uuid,
@@ -81,22 +142,31 @@ pub async fn check_one(
     port: i32,
     kind: &str,
 ) -> Result<Option<bool>> {
-    if is_udp(kind) {
-        return Ok(None);
-    }
     let Ok(port) = u16::try_from(port) else {
         return Ok(None);
     };
-    let ok = tcp_open(host, port).await;
-    repo::set_inbound_reachability(
-        pool,
-        inbound_id,
-        Some(ok),
-        if ok { None } else { Some("tcp connect failed") },
-    )
-    .await?;
+    let quic = is_quic(kind);
+    let ok = if quic {
+        quic_open(host, port).await
+    } else {
+        tcp_open(host, port).await
+    };
+    let error = if ok {
+        None
+    } else if quic {
+        Some("quic version negotiation failed")
+    } else {
+        Some("tcp connect failed")
+    };
+    repo::set_inbound_reachability(pool, inbound_id, Some(ok), error).await?;
     if !ok {
-        tracing::warn!(code = "M1501", %inbound_id, endpoint = %format!("{host}:{port}"), "endpoint unreachable from master");
+        tracing::warn!(
+            code = "M1501",
+            %inbound_id,
+            endpoint = %format!("{host}:{port}"),
+            probe = if quic { "quic" } else { "tcp" },
+            "endpoint unreachable from master"
+        );
     }
     Ok(Some(ok))
 }
@@ -108,7 +178,7 @@ pub struct PreflightTarget {
     pub kind: String,
     pub label: String,
     pub target: String,
-    /// None = not probeable from here (UDP/QUIC, or a dial-mode node)
+    /// None = not probeable from here (for example a dial-mode control port).
     pub reachable: Option<bool>,
     pub detail: String,
 }
@@ -153,17 +223,9 @@ pub async fn preflight(
     // data plane: each enabled inbound's public port.
     for inbound in repo::enabled_node_inbounds(pool, node.id).await? {
         let target = format!("{}:{}", node.address, inbound.listen_port);
-        if is_udp(&inbound.kind) {
-            out.push(PreflightTarget {
-                kind: "data".into(),
-                label: format!("{} ({})", inbound.tag, inbound.kind),
-                target,
-                reachable: None,
-                detail: "udp/quic — not probeable from the master".into(),
-            });
-            continue;
-        }
+        let quic = is_quic(&inbound.kind);
         let ok = match u16::try_from(inbound.listen_port) {
+            Ok(port) if quic => Some(quic_open(&node.address, port).await),
             Ok(port) => Some(tcp_open(&node.address, port).await),
             Err(_) => None,
         };
@@ -173,8 +235,10 @@ pub async fn preflight(
             target,
             reachable: ok,
             detail: match ok {
-                Some(true) => "port open".into(),
-                Some(false) => "tcp connect failed".into(),
+                Some(true) if quic => "QUIC version negotiation succeeded".into(),
+                Some(true) => "TCP port open".into(),
+                Some(false) if quic => "QUIC version negotiation failed".into(),
+                Some(false) => "TCP connect failed".into(),
                 None => "invalid port".into(),
             },
         });
@@ -285,6 +349,40 @@ mod tests {
         ];
         // b is 5% faster, below the 30% margin → stay on a.
         assert_eq!(pick_best_cdn(&m, Some("a.cdn"), 30), None);
+    }
+
+    #[test]
+    fn builds_padded_quic_probe_with_reserved_version() {
+        let packet = quic_probe_packet();
+        assert_eq!(packet.len(), QUIC_MIN_INITIAL_SIZE);
+        assert_eq!(packet[0] & 0xc0, 0xc0);
+        assert_eq!(packet[1..5], QUIC_RESERVED_VERSION);
+        assert_eq!(packet[5], 8);
+        assert_eq!(packet[14], 8);
+    }
+
+    #[test]
+    fn recognizes_only_quic_version_negotiation() {
+        assert!(is_quic_version_negotiation(&[0x80, 0, 0, 0, 0]));
+        assert!(!is_quic_version_negotiation(&[0x40, 0, 0, 0, 0]));
+        assert!(!is_quic_version_negotiation(&[0x80, 0, 0, 0, 1]));
+        assert!(!is_quic_version_negotiation(&[0x80, 0, 0]));
+    }
+
+    #[tokio::test]
+    async fn quic_probe_accepts_mock_version_negotiation() {
+        let server = UdpSocket::bind("127.0.0.1:0").await.unwrap();
+        let addr = server.local_addr().unwrap();
+        let responder = tokio::spawn(async move {
+            let mut probe = [0u8; QUIC_MIN_INITIAL_SIZE];
+            let (size, peer) = server.recv_from(&mut probe).await.unwrap();
+            assert_eq!(size, QUIC_MIN_INITIAL_SIZE);
+            assert_eq!(probe[1..5], QUIC_RESERVED_VERSION);
+            server.send_to(&[0x80, 0, 0, 0, 0], peer).await.unwrap();
+        });
+
+        assert!(quic_open_addr(addr).await);
+        responder.await.unwrap();
     }
 
     #[test]

@@ -5,6 +5,19 @@ version tags and is currently pre-stable.
 
 ## [Unreleased]
 
+## [0.1.4] - 2026-08-30
+
+### Added
+
+- Master reachability monitoring and rollout preflight now verify Hysteria2
+  and TUIC endpoints through credential-free QUIC Version Negotiation over
+  UDP, instead of leaving them permanently unchecked.
+
+### Changed
+
+- The panel now distinguishes a pending QUIC result from a confirmed failure
+  and explains which transport-specific probe was used.
+
 ## [0.1.3] - 2026-08-18
 
 ### Added

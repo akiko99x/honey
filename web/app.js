@@ -728,7 +728,7 @@
     if (inbound.reachable === true) return '<span class="status ok">reachable</span>';
     if (inbound.reachable === false) return `<span class="status bad" title="${esc(inbound.reach_error || "")}">unreachable</span>`;
     if (["hysteria2", "tuic"].includes(inbound.kind)) {
-      return '<span class="status warn" title="UDP/QUIC cannot be verified with the master TCP probe. Use an external vantage checker.">UDP · external probe</span>';
+      return '<span class="status warn" title="No QUIC reachability result has been recorded yet. Wait for the next probe or run one now.">QUIC · not checked</span>';
     }
     return '<span class="status warn" title="No reachability result has been recorded yet. Run a probe or wait for the next refresh.">not checked</span>';
   }
@@ -739,7 +739,7 @@
       const i = state.inbounds.findIndex((x) => x.id === id);
       if (i >= 0) state.inbounds[i] = updated;
       await loadData({ quiet: true });
-      toast(updated.reachable === true ? "endpoint reachable" : updated.reachable === false ? "endpoint unreachable" : "UDP/QUIC needs an external reachability report");
+      toast(updated.reachable === true ? "endpoint reachable" : updated.reachable === false ? "endpoint unreachable" : "endpoint could not be probed");
     } catch (error) { toast(error.message, true); }
   }
 
@@ -1946,7 +1946,7 @@
     showList("Preflight", `<div class="form-body">
       <div class="check-list">${rows || '<p class="form-note">Nothing to probe.</p>'}</div>
       <p class="form-note" style="margin-top:10px">${verdict} · gate: <b>${esc(report.gate)}</b></p>
-      <p class="form-note">A probe only proves the port is reachable <b>from the master's network</b> — it is not a guarantee of a "clean" address. Blocklist/reputation checks are a separate concern. UDP/QUIC inbounds can't be TCP-probed from here.</p>
+      <p class="form-note">A probe only proves the endpoint is reachable <b>from the master's network</b> — TCP services use a connect probe, while HY2/TUIC use QUIC version negotiation over UDP. This is not a guarantee of a "clean" address; blocklist and reputation checks are separate.</p>
     </div>`);
   }
   function driftBadge(node) {
