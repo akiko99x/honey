@@ -13,7 +13,7 @@ jobs:
   quality:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
       - uses: actions/setup-go@v6
@@ -75,7 +75,7 @@ jobs:
       ADMIN_DATABASE_URL: postgres://honey:honey@127.0.0.1:5432/postgres
       HONEY_SECRET_KEY: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - name: Rust toolchain
         run: rustup update stable && rustup default stable
       - name: PostgreSQL client
@@ -128,7 +128,7 @@ jobs:
   secrets:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
       - name: Secret scan
