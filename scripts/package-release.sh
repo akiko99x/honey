@@ -2,11 +2,12 @@
 # Build a reproducible Linux release archive from already-built binaries.
 set -euo pipefail
 
-version="${1:?usage: package-release.sh <version> <honey-master> <honey-agent> <honey-enroll> [out-dir]}"
+version="${1:?usage: package-release.sh <version> <honey-master> <honey-agent> <honey-enroll> <honey-mcp> [out-dir]}"
 master_bin="${2:?missing honey-master binary}"
 agent_bin="${3:?missing honey-agent binary}"
 enroll_bin="${4:?missing honey-enroll binary}"
-out="${5:-dist}"
+mcp_bin="${5:?missing honey-mcp binary}"
+out="${6:-dist}"
 
 [[ "$version" =~ ^v?[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?$ ]] || {
 	echo "invalid release version: $version" >&2
@@ -14,7 +15,7 @@ out="${5:-dist}"
 }
 version="${version#v}"
 
-for binary in "$master_bin" "$agent_bin" "$enroll_bin"; do
+for binary in "$master_bin" "$agent_bin" "$enroll_bin" "$mcp_bin"; do
 	[[ -f "$binary" ]] || {
 		echo "binary not found: $binary" >&2
 		exit 1
@@ -29,6 +30,7 @@ install -d "$root/bin" "$root/deploy/systemd" "$root/deploy/docker" "$root/scrip
 install -m 0755 "$master_bin" "$root/bin/honey-master"
 install -m 0755 "$agent_bin" "$root/bin/honey-agent"
 install -m 0755 "$enroll_bin" "$root/bin/honey-enroll"
+install -m 0755 "$mcp_bin" "$root/bin/honey-mcp"
 install -m 0755 scripts/install.sh scripts/install-release.sh scripts/bootstrap.sh \
 	scripts/install-docker.sh scripts/docker-backup.sh scripts/docker-restore-check.sh \
 	scripts/fetch-github-release-asset.sh scripts/gen-certs.sh \

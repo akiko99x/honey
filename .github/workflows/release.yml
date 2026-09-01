@@ -28,7 +28,7 @@ jobs:
       - name: Test
         run: |
           (cd agent && go test ./...)
-          (cd master && cargo fmt -- --check && cargo test --locked)
+          (cd master && cargo fmt -- --check && cargo test --locked && cargo test --locked --features mcp --bin honey-mcp)
           node --check web/app.js
           node --check web/subscription.js
           bash -n scripts/*.sh
@@ -40,19 +40,22 @@ jobs:
           GOARCH: amd64
         run: |
           mkdir -p build
-          cargo build --locked --release --manifest-path master/Cargo.toml --features dial-acceptor,acme
+          cargo build --locked --release --manifest-path master/Cargo.toml --features dial-acceptor,acme,mcp
           cp master/target/release/honey-master build/honey-master
+          cp master/target/release/honey-mcp build/honey-mcp
           (cd agent && go build -trimpath -ldflags='-s -w' -o ../build/honey-agent ./cmd/agent)
           (cd agent && go build -trimpath -ldflags='-s -w' -o ../build/honey-enroll ./cmd/enroll)
       - name: Package checksummed archive
         run: |
           bash scripts/package-release.sh "$GITHUB_REF_NAME" \
-            build/honey-master build/honey-agent build/honey-enroll dist
+            build/honey-master build/honey-agent build/honey-enroll build/honey-mcp dist
           install -m 0755 build/honey-master \
             "dist/honey-master-linux-x86_64"
+          install -m 0755 build/honey-mcp \
+            "dist/honey-mcp-linux-x86_64"
           (
             cd dist
-            sha256sum honey-master-linux-x86_64 \
+            sha256sum honey-master-linux-x86_64 honey-mcp-linux-x86_64 \
               honey-*.tar.gz > SHA256SUMS
           )
       - name: Publish GitHub release assets
@@ -63,7 +66,37 @@ jobs:
             dist/*.tar.gz
             dist/*.sha256
             dist/honey-master-linux-x86_64
+            dist/honey-mcp-linux-x86_64
             dist/SHA256SUMS
+
+  windows-amd64-mcp:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Rust toolchain
+        shell: pwsh
+        run: rustup update stable; rustup default stable
+      - name: Verify tag matches Cargo package version
+        shell: pwsh
+        run: |
+          $version = "${{ github.ref_name }}" -replace '^v', ''
+          $cargoVersion = (Select-String -Path master/Cargo.toml -Pattern '^version = "([^"]+)"' | Select-Object -First 1).Matches.Groups[1].Value
+          if ($version -ne $cargoVersion) { throw "tag $version does not match Cargo $cargoVersion" }
+      - name: Test and build Windows MCP binary
+        shell: pwsh
+        run: |
+          cargo test --locked --manifest-path master/Cargo.toml --features mcp --bin honey-mcp
+          cargo build --locked --release --manifest-path master/Cargo.toml --features mcp --bin honey-mcp
+          New-Item -ItemType Directory -Force dist | Out-Null
+          Copy-Item master/target/release/honey-mcp.exe dist/honey-mcp-windows-x86_64.exe
+          $hash = (Get-FileHash dist/honey-mcp-windows-x86_64.exe -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$hash  honey-mcp-windows-x86_64.exe" | Out-File -Encoding ascii -NoNewline dist/honey-mcp-windows-x86_64.exe.sha256
+      - name: Publish Windows MCP asset
+        uses: softprops/action-gh-release@v3
+        with:
+          files: |
+            dist/honey-mcp-windows-x86_64.exe
+            dist/honey-mcp-windows-x86_64.exe.sha256
 
   container-images:
     needs: linux-amd64

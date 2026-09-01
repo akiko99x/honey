@@ -5,6 +5,23 @@ version tags and is currently pre-stable.
 
 ## [Unreleased]
 
+## [0.1.5] - 2026-09-01
+
+### Added
+
+- `honey-mcp`, an official stdio MCP server that exposes every protected panel
+  operation through separate discovery, read, write, delete and fleet-status
+  tools while preserving Honey API-key RBAC, auditing and request IDs.
+- Automatic MCP operation discovery from the panel router, backed by a coverage
+  test so new panel routes cannot silently disappear from the MCP surface.
+- Linux and Windows x86_64 MCP release binaries and secure API-key-file support.
+
+### Security
+
+- MCP requests are pinned to one configured Honey origin, reject path traversal
+  and embedded query strings, bound response sizes and require an exact
+  confirmation phrase for DELETE calls.
+
 ## [0.1.4] - 2026-08-30
 
 ### Added

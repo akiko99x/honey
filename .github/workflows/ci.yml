@@ -38,6 +38,7 @@ jobs:
         run: |
           cargo test --locked
           cargo test --locked --features dial-acceptor
+          cargo test --locked --features mcp --bin honey-mcp
           cargo check --locked --features tls
           cargo check --locked --features acme
           cargo check --locked --features dial-acceptor,acme

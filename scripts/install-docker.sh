@@ -91,6 +91,13 @@ ubuntu:*|debian:*|*:debian*) ;;
 *) echo "supported hosts are Ubuntu/Debian; found ${PRETTY_NAME:-unknown}" >&2; exit 1 ;;
 esac
 
+# The MCP bridge runs on the host and talks to the loopback-bound master. It is
+# deliberately not placed in the master container so Codex can launch it over
+# an audited SSH stdio session without exposing another public port.
+if [[ -x "$source_root/bin/honey-mcp" ]]; then
+	install -m 0755 "$source_root/bin/honey-mcp" /usr/local/bin/honey-mcp
+fi
+
 ensure_docker() {
 	if command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1; then
 		return

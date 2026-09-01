@@ -38,12 +38,14 @@ the database.
 
 ## Build
 
-Produces `honey-master`, `honey-agent` and `honey-enroll`:
+Produces `honey-master`, `honey-agent`, `honey-enroll` and the optional
+`honey-mcp` integration binary:
 
 ```bash
 mkdir -p dist
-cargo build --release --manifest-path master/Cargo.toml --features dial-acceptor
+cargo build --release --manifest-path master/Cargo.toml --features dial-acceptor,mcp
 cp master/target/release/honey-master dist/honey-master
+cp master/target/release/honey-mcp dist/honey-mcp
 (cd agent && go build -o ../dist/honey-agent ./cmd/agent)
 (cd agent && go build -o ../dist/honey-enroll ./cmd/enroll)
 ```
@@ -51,6 +53,23 @@ cp master/target/release/honey-master dist/honey-master
 Optional master features: `dial-acceptor` (accept NAT nodes that dial in), `tls`
 (in-process HTTPS), `acme` (built-in ACME). They pull version-sensitive deps, so
 they stay out of the default build.
+
+## MCP automation
+
+`honey-mcp` is the official local stdio bridge for AI clients. It covers every
+protected panel route and keeps Honey's normal named API-key RBAC, audit log and
+request IDs. The tools separate discovery, read-only status, state changes and
+confirmed deletion; no database or Docker socket is exposed.
+
+```bash
+honey-mcp \
+  --base-url https://panel.example.com/honey \
+  --api-key-file /run/secrets/honey-mcp-api-key
+```
+
+Release archives contain the Linux binary and GitHub Releases also publishes a
+Windows x86_64 executable. See [`docs/mcp.md`](docs/mcp.md) for secure Codex
+configuration, the complete tool contract and production recommendations.
 
 ## Install (single-server)
 

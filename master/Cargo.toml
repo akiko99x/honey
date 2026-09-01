@@ -1,6 +1,6 @@
 [package]
 name = "honey-master"
-version = "0.1.4"
+version = "0.1.5"
 edition = "2021"
 description = "honey master — panel, db, rest api, grpc client to node agents"
 license = "AGPL-3.0-only"
@@ -10,6 +10,11 @@ homepage = "https://github.com/akiko99x/honey"
 [[bin]]
 name = "honey-master"
 path = "src/main.rs"
+
+[[bin]]
+name = "honey-mcp"
+path = "src/bin/honey-mcp.rs"
+required-features = ["mcp"]
 
 [dependencies]
 tonic = { version = "0.12", features = ["tls"] }
@@ -42,8 +47,9 @@ argon2 = "0.5"
 sha2 = "0.10"
 totp-rs = { version = "5", default-features = false, features = ["otpauth", "gen_secret"] }
 ipnet = "2"
-reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "stream"] }
 qrcode = { version = "0.14", default-features = false, features = ["svg"] }
+rmcp = { version = "3.2", features = ["schemars", "transport-io"], optional = true }
 
 # dial-mode acceptor only (nodes behind NAT dial in). optional so the extra,
 # version-sensitive deps can't affect the default build. tokio-rustls itself is
@@ -62,6 +68,7 @@ futures-util = { version = "0.3", optional = true }
 dial-acceptor = ["dep:rustls"]
 tls = ["dep:axum-server", "dep:rustls"]
 acme = ["tls", "dep:rustls-acme", "dep:futures-util"]
+mcp = ["dep:rmcp"]
 
 [build-dependencies]
 tonic-build = "0.12"

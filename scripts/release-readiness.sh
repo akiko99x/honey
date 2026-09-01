@@ -188,6 +188,7 @@ step "Rust test and feature matrix"
 (cd master && cargo fmt -- --check)
 (cd master && cargo test --locked)
 (cd master && cargo test --locked --features dial-acceptor)
+(cd master && cargo test --locked --features mcp --bin honey-mcp)
 (cd master && cargo check --locked --features tls)
 (cd master && cargo check --locked --features acme)
 (cd master && cargo check --locked --features dial-acceptor,acme)
@@ -203,16 +204,17 @@ for tool in tar go cargo; do need "$tool"; done
 step "Linux package and checksum"
 work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
-cargo build --locked --release --manifest-path master/Cargo.toml --features dial-acceptor,acme
+cargo build --locked --release --manifest-path master/Cargo.toml --features dial-acceptor,acme,mcp
 (cd agent && CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags='-s -w' -o "$work/honey-agent" ./cmd/agent)
 (cd agent && CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags='-s -w' -o "$work/honey-enroll" ./cmd/enroll)
 bash scripts/package-release.sh "v$version" \
-	master/target/release/honey-master "$work/honey-agent" "$work/honey-enroll" "$work/dist"
+	master/target/release/honey-master "$work/honey-agent" "$work/honey-enroll" \
+	master/target/release/honey-mcp "$work/dist"
 archive="$work/dist/honey-${version}-linux-amd64.tar.gz"
 (cd "$work/dist" && sha256sum -c "$(basename "$archive").sha256")
 contents="$(tar -tzf "$archive")"
 for required in \
-	bin/honey-master bin/honey-agent bin/honey-enroll \
+	bin/honey-master bin/honey-agent bin/honey-enroll bin/honey-mcp \
 	scripts/install.sh scripts/install-release.sh scripts/bootstrap.sh \
 	scripts/install-docker.sh scripts/docker-backup.sh scripts/docker-restore-check.sh \
 	README.md LICENSE deploy/systemd/honey-master.service \
