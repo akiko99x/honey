@@ -42,7 +42,7 @@ hyper-util = { version = "0.1", features = ["tokio"] }
 tower = { version = "0.5", features = ["util"] }
 x509-parser = "0.16"
 chacha20poly1305 = { version = "0.10", default-features = false, features = ["alloc"] }
-getrandom = "0.2"
+getrandom = "0.4"
 argon2 = "0.5"
 sha2 = "0.10"
 totp-rs = { version = "5", default-features = false, features = ["otpauth", "gen_secret"] }
