@@ -2,6 +2,7 @@
 name = "honey-master"
 version = "0.1.5"
 edition = "2021"
+default-run = "honey-master"
 description = "honey master — panel, db, rest api, grpc client to node agents"
 license = "AGPL-3.0-only"
 repository = "https://github.com/akiko99x/honey"
