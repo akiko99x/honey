@@ -117,7 +117,7 @@ jobs:
           echo "version=$version" >> "$GITHUB_OUTPUT"
           echo "prefix=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_OUTPUT"
       - name: Build and publish master image
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           file: deploy/docker/Dockerfile.master
@@ -129,7 +129,7 @@ jobs:
           cache-from: type=gha,scope=master
           cache-to: type=gha,mode=max,scope=master
       - name: Build and publish agent image
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           file: deploy/docker/Dockerfile.agent
@@ -143,7 +143,7 @@ jobs:
           cache-from: type=gha,scope=agent
           cache-to: type=gha,mode=max,scope=agent
       - name: Build and publish backup image
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           file: deploy/docker/Dockerfile.backup
